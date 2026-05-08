@@ -45,8 +45,8 @@ class AzureKeyVaultBackend:
         vault_url: Full Azure Key Vault URL.  Falls back to
             ``AZURE_KEYVAULT_URL`` env var if empty.
         cache_ttl_seconds: Unused here — caching is handled by
-            ``CachedVaultBackend`` in the layer above.  Accepted for backward
-            compatibility with the old ``vault_azure`` module config schema.
+            ``CachedVaultBackend`` in the layer above. Retained on the
+            constructor signature so config TOMLs that pass it don't error.
 
     Raises:
         ValueError: If the vault URL cannot be resolved from either the

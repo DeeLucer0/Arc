@@ -18,11 +18,6 @@ Tier policy (SDD §3.1)
 Federal   : vault required; VaultUnreachable → hard error, no fallback
 Enterprise: vault first; VaultUnreachable → WARN + audit + env fallback
 Personal  : vault → env → file; each step optional
-
-Migration note
---------------
-The old ``arcagent.modules.vault_azure`` import path continues to work via a
-deprecation shim.  Update imports to ``arcagent.modules.vault.backends.azure``.
 """
 
 from arcagent.modules.vault.cache import CachedVaultBackend
