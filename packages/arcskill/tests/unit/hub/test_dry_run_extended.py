@@ -229,12 +229,12 @@ def test_safe_extract_normal_bundle_extracts_all() -> None:
 
 
 def test_docker_available_returns_true_when_on_path() -> None:
-    with patch("arcskill.hub.dry_run.shutil.which", return_value="/usr/bin/docker"):
+    with patch("arcskill.hub._docker.shutil.which", return_value="/usr/bin/docker"):
         assert _docker_available() is True
 
 
 def test_docker_available_returns_false_when_absent() -> None:
-    with patch("arcskill.hub.dry_run.shutil.which", return_value=None):
+    with patch("arcskill.hub._docker.shutil.which", return_value=None):
         assert _docker_available() is False
 
 
@@ -426,7 +426,7 @@ async def test_run_docker_returns_skipped_when_no_docker_backend() -> None:
     """_run_docker returns skipped result when DockerBackend is None."""
     skill_dir = Path(tempfile.mkdtemp())
 
-    with patch("arcskill.hub.dry_run._DockerBackend", None):
+    with patch("arcskill.hub._docker._DockerBackend", None):
         result = await _run_docker("pytest", skill_dir)
 
     assert result.skipped is True
@@ -449,7 +449,7 @@ async def test_run_docker_success_with_mock_backend() -> None:
 
     mock_backend_cls = MagicMock(return_value=mock_backend)
 
-    with patch("arcskill.hub.dry_run._DockerBackend", mock_backend_cls):
+    with patch("arcskill.hub._docker._DockerBackend", mock_backend_cls):
         result = await _run_docker("pytest", skill_dir)
 
     assert result.passed is True
@@ -468,7 +468,7 @@ async def test_run_docker_timeout_sets_exit_code_minus_one() -> None:
 
     mock_backend_cls = MagicMock(return_value=mock_backend)
 
-    with patch("arcskill.hub.dry_run._DockerBackend", mock_backend_cls):
+    with patch("arcskill.hub._docker._DockerBackend", mock_backend_cls):
         result = await _run_docker("pytest", skill_dir)
 
     assert result.passed is False

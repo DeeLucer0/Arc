@@ -82,8 +82,8 @@ def test_is_firecracker_available_returns_false_on_macos() -> None:
 def test_is_firecracker_available_detects_kvm_and_binaries() -> None:
     """When /dev/kvm exists AND both binaries are on PATH → returns True."""
     with (
-        patch("arcskill.hub.dry_run.Path") as mock_path_class,
-        patch("arcskill.hub.dry_run.shutil.which") as mock_which,
+        patch("arcskill.hub._firecracker.Path") as mock_path_class,
+        patch("arcskill.hub._firecracker.shutil.which") as mock_which,
     ):
         # /dev/kvm exists
         kvm_instance = MagicMock()
@@ -112,8 +112,8 @@ def test_is_firecracker_available_detects_kvm_and_binaries() -> None:
 def test_is_firecracker_available_returns_false_when_kvm_missing() -> None:
     """Without /dev/kvm, availability is False even with binaries present."""
     with (
-        patch("arcskill.hub.dry_run.Path") as mock_path_class,
-        patch("arcskill.hub.dry_run.shutil.which", return_value="/usr/bin/firecracker"),
+        patch("arcskill.hub._firecracker.Path") as mock_path_class,
+        patch("arcskill.hub._firecracker.shutil.which", return_value="/usr/bin/firecracker"),
     ):
         kvm_instance = MagicMock()
         kvm_instance.exists.return_value = False
@@ -128,8 +128,8 @@ def test_is_firecracker_available_returns_false_when_kvm_missing() -> None:
 def test_is_firecracker_available_returns_false_when_jailer_missing() -> None:
     """Without jailer binary, availability is False even with KVM + firecracker."""
     with (
-        patch("arcskill.hub.dry_run.Path") as mock_path_class,
-        patch("arcskill.hub.dry_run.shutil.which") as mock_which,
+        patch("arcskill.hub._firecracker.Path") as mock_path_class,
+        patch("arcskill.hub._firecracker.shutil.which") as mock_which,
     ):
         kvm_instance = MagicMock()
         kvm_instance.exists.return_value = True
@@ -310,7 +310,7 @@ async def test_enterprise_falls_back_to_docker_when_firecracker_missing(
     with (
         patch("arcskill.hub.dry_run.is_firecracker_available", return_value=False),
         patch("arcskill.hub.dry_run._docker_available", return_value=True),
-        patch("arcskill.hub.dry_run._DockerBackend", mock_docker_class),
+        patch("arcskill.hub._docker._DockerBackend", mock_docker_class),
     ):
         result = await _run_in_sandbox("pytest", tmp_path, config)
 
@@ -340,7 +340,7 @@ async def test_personal_falls_back_to_docker_when_firecracker_missing(
     with (
         patch("arcskill.hub.dry_run.is_firecracker_available", return_value=False),
         patch("arcskill.hub.dry_run._docker_available", return_value=True),
-        patch("arcskill.hub.dry_run._DockerBackend", mock_docker_class),
+        patch("arcskill.hub._docker._DockerBackend", mock_docker_class),
     ):
         result = await _run_in_sandbox("pytest", tmp_path, config)
 
@@ -392,7 +392,7 @@ async def test_firecracker_sandbox_execute_raises_sandbox_required_without_fc_bi
     (tmp_path / "vmlinux.bin").write_bytes(b"fake")
     (tmp_path / "rootfs.ext4").write_bytes(b"fake")
 
-    with patch("arcskill.hub.dry_run.shutil.which", return_value=None):
+    with patch("arcskill.hub._firecracker.shutil.which", return_value=None):
         # The SandboxRequired is caught inside execute() and returned as
         # a failed DryRunResult — but we patch _prepare_chroot to skip
         # the real mount syscall.
@@ -414,7 +414,7 @@ async def test_firecracker_sandbox_execute_returns_vm_id(tmp_path: Path) -> None
     (tmp_path / "vmlinux.bin").write_bytes(b"fake")
     (tmp_path / "rootfs.ext4").write_bytes(b"fake")
 
-    with patch("arcskill.hub.dry_run.shutil.which", return_value=None):
+    with patch("arcskill.hub._firecracker.shutil.which", return_value=None):
         with patch.object(sandbox, "_prepare_chroot", AsyncMock()):
             result = await sandbox.execute(tmp_path, timeout_s=2)
 
