@@ -3,7 +3,7 @@ api_format = "openai-chat"
 base_url = "https://oai-josh-agent.openai.azure.com"
 api_key_env = "AZURE_OPENAI_API_KEY"
 api_key_required = true
-default_model = "gpt-4-1"
+default_model = "gpt-4.1"
 default_temperature = 0.7
 vault_path = "azure-openai-api-key"  # Key Vault secret name
 
@@ -14,7 +14,7 @@ vault_path = "azure-openai-api-key"  # Key Vault secret name
 
 # --- GPT-4.1 family ---
 
-[models.gpt-4_1]
+[models."gpt-4.1"]
 context_window = 300000
 max_output_tokens = 32768
 supports_tools = true
@@ -26,7 +26,7 @@ cost_output_per_1m = 8.00
 cost_cache_read_per_1m = 0.50
 cost_cache_write_per_1m = 2.00
 
-[models.gpt-4_1-mini]
+[models."gpt-4.1-mini"]
 context_window = 300000
 max_output_tokens = 32768
 supports_tools = true
@@ -38,7 +38,7 @@ cost_output_per_1m = 1.60
 cost_cache_read_per_1m = 0.10
 cost_cache_write_per_1m = 0.40
 
-[models.gpt-4_1-nano]
+[models."gpt-4.1-nano"]
 context_window = 300000
 max_output_tokens = 32768
 supports_tools = true
