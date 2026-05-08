@@ -3,17 +3,27 @@
 Supports 4 transports: native (Python), MCP, HTTP, and process.
 Every tool call is wrapped with pre/post events, policy checks,
 timeout enforcement, and audit logging.
+
+Sibling modules
+---------------
+- ``arcagent.core.tool_transport``      — ToolTransport enum,
+  RegisteredTool dataclass, ``native_tool`` decorator,
+  ``_validate_tool_args``, ``_echo_tool``, ``ToolClassification``.
+- ``arcagent.core.tool_policy_bridge``  — caller-DID binding helpers
+  (``_is_memory_tool``, ``_bind_caller_did``) plus the
+  ``_MEMORY_TOOL_PREFIXES`` / ``_IDENTITY_ARG_NAMES`` constants.
+
+Names from the siblings are re-exported through this module so existing
+imports
+(``from arcagent.core.tool_registry import RegisteredTool, ToolTransport,
+   native_tool, _bind_caller_did``) keep working unchanged.
 """
 
 from __future__ import annotations
 
 import asyncio
-import inspect
 import logging
 import time
-from collections.abc import Callable
-from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any, Literal
 from xml.sax.saxutils import escape as xml_escape
 
@@ -30,296 +40,41 @@ from arcagent.core.tool_policy import (
     PolicyPipeline,
     ToolCall,
 )
-
-ToolClassification = Literal["read_only", "state_modifying"]
+from arcagent.core.tool_policy_bridge import (
+    _IDENTITY_ARG_NAMES,
+    _MEMORY_TOOL_PREFIXES,
+    _bind_caller_did,
+    _is_memory_tool,
+)
+from arcagent.core.tool_transport import (
+    _DEFAULT_PREAMBLE,
+    _PY_TYPE_MAP,
+    RegisteredTool,
+    ToolClassification,
+    ToolTransport,
+    _echo_tool,
+    _validate_tool_args,
+    native_tool,
+)
 
 _logger = logging.getLogger("arcagent.tool_registry")
 
-# ---------------------------------------------------------------------------
-# Caller-DID binding — ASI03 / LLM01 defence
-# ---------------------------------------------------------------------------
 
-# Tool name prefixes that gate access to identity-scoped memory stores.
-# Any tool whose name starts with one of these prefixes is subject to
-# caller-DID binding: the transport layer strips any identity field the
-# LLM may have supplied and injects the real agent DID from RunState.
-_MEMORY_TOOL_PREFIXES: tuple[str, ...] = (
-    "memory",
-    "session",
-    "user_profile",
-)
-
-# Argument names that an LLM could inject to impersonate another identity.
-# These are stripped from memory tool arguments before execution and
-# replaced with a single ``caller_did`` field set to the real agent DID.
-_IDENTITY_ARG_NAMES: frozenset[str] = frozenset(
-    {
-        "caller_did",
-        "user_did",
-        "owner_did",
-    }
-)
-
-
-def _is_memory_tool(tool_name: str) -> bool:
-    """Return True if *tool_name* is an identity-scoped memory tool.
-
-    Matches by prefix (``memory``, ``session``, ``user_profile``) using
-    both dot-separated and underscore-separated conventions so callers
-    don't need to normalise the name first.
-
-    Examples::
-
-        _is_memory_tool("memory.read")    → True
-        _is_memory_tool("memory_search")  → True
-        _is_memory_tool("session_search") → True
-        _is_memory_tool("bash")           → False
-    """
-    for prefix in _MEMORY_TOOL_PREFIXES:
-        # Accept both "prefix." and "prefix_" separators
-        if (
-            tool_name == prefix
-            or tool_name.startswith(prefix + ".")
-            or tool_name.startswith(prefix + "_")
-        ):
-            return True
-    return False
-
-
-def _bind_caller_did(
-    tool_name: str,
-    args: dict[str, Any],
-    real_did: str,
-    *,
-    telemetry: Any,
-) -> dict[str, Any]:
-    """Strip LLM-supplied identity fields and inject the real agent DID.
-
-    This is the transport-layer defence against ASI03 (Identity & Privilege
-    Abuse) and LLM01 (Prompt Injection via identity fields).
-
-    For memory tools only:
-    - Any field in ``_IDENTITY_ARG_NAMES`` is removed from the args copy.
-    - ``caller_did`` is set to *real_did*.
-    - If any identity field was stripped, a ``security.caller_did_override_attempt``
-      audit event is emitted so operators can detect injection probes.
-
-    For non-memory tools the args dict is returned unchanged (no ``caller_did``
-    injection) because most tools don't have an identity contract.
-
-    Args:
-        tool_name: Name of the tool being called.
-        args: Original arguments dict (NOT mutated).
-        real_did: The agent's authoritative DID from RunState/identity.
-        telemetry: AgentTelemetry instance for audit events, or None.
-
-    Returns:
-        A new dict safe to pass to the tool executor.
-    """
-    if not _is_memory_tool(tool_name):
-        # Non-memory tools: return a copy but do not inject caller_did —
-        # most tools don't have an identity contract.
-        return dict(args)
-
-    # Work on a copy so the original caller's dict is never mutated.
-    cleaned = {k: v for k, v in args.items() if k not in _IDENTITY_ARG_NAMES}
-
-    # Detect injection attempt: did the LLM supply any identity field?
-    stripped = [k for k in _IDENTITY_ARG_NAMES if k in args]
-    if stripped and telemetry is not None:
-        telemetry.audit_event(
-            "security.caller_did_override_attempt",
-            {
-                "tool": tool_name,
-                "stripped_fields": stripped,
-                "injected_did": args.get("caller_did")
-                or args.get("user_did")
-                or args.get("owner_did"),
-            },
-        )
-
-    # Always inject the real DID — even when the LLM didn't try to override.
-    cleaned["caller_did"] = real_did
-    return cleaned
-
-
-_DEFAULT_PREAMBLE = (
-    "You have the following tools available. Use them as needed to accomplish your tasks."
-)
-
-
-class ToolTransport(Enum):
-    """Transport type for tool execution."""
-
-    NATIVE = "native"
-    MCP = "mcp"
-    HTTP = "http"
-    PROCESS = "process"
-
-
-@dataclass
-class RegisteredTool:
-    """A tool registered in the registry.
-
-    ``classification`` is the SPEC-017 R-020 contract: read-only tools
-    may run in parallel batches; state-modifying tools force sequential
-    execution. Default is ``"state_modifying"`` (fail-closed) so
-    unannotated tools never accidentally race.
-    """
-
-    name: str
-    description: str
-    input_schema: dict[str, Any]
-    transport: ToolTransport
-    execute: Any  # Callable[..., Awaitable[Any]]
-    timeout_seconds: int = 30
-    source: str = ""
-    when_to_use: str = ""
-    example: str = ""
-    category: str = ""
-    classification: ToolClassification = "state_modifying"
-    # Capability tags power non-compositional safety checks (SPEC-017
-    # SDD §5.2). Examples: "file_read", "file_write", "network_egress",
-    # "subprocess", "state_mutation". Empty = no declared capabilities.
-    capability_tags: list[str] = field(default_factory=list)
-
-
-# -- Type map for native_tool decorator schema generation --
-_PY_TYPE_MAP: dict[type, str] = {
-    str: "string",
-    int: "integer",
-    float: "number",
-    bool: "boolean",
-}
-
-
-def native_tool(
-    *,
-    name: str = "",
-    description: str = "",
-    source: str = "",
-    timeout_seconds: int = 30,
-    params: dict[str, str | dict[str, Any]] | None = None,
-    required: list[str] | None = None,
-    when_to_use: str = "",
-    example: str = "",
-    category: str = "",
-) -> Callable[..., Any]:
-    """Decorator that converts an async function into a RegisteredTool.
-
-    Eliminates boilerplate — schema is built from function signature
-    and the optional ``params`` dict. The decorated function gains a
-    ``.tool`` attribute holding the RegisteredTool.
-
-    Usage::
-
-        @native_tool(
-            description="Send a message",
-            source="messaging",
-            params={"to": "Recipient URI", "body": "Message body"},
-            required=["to", "body"],
-        )
-        async def messaging_send(to="", body="", **kwargs):
-            ...
-
-    ``params`` values can be a string (used as description) or a dict
-    with full JSON Schema property fields (type, enum, default, etc).
-    """
-
-    def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
-        tool_name = name or fn.__name__
-        tool_desc = description or fn.__doc__ or ""
-
-        # Build input schema from function signature + params hints.
-        properties: dict[str, Any] = {}
-        sig = inspect.signature(fn)
-        for param_name, param in sig.parameters.items():
-            if param_name in ("self", "kwargs") or param.kind == param.VAR_KEYWORD:
-                continue
-
-            prop: dict[str, Any] = {}
-
-            # Infer JSON Schema type from annotation or default value.
-            annotation = param.annotation
-            if annotation is not inspect.Parameter.empty and annotation in _PY_TYPE_MAP:
-                prop["type"] = _PY_TYPE_MAP[annotation]
-            elif param.default is not inspect.Parameter.empty and param.default is not None:
-                default_type = type(param.default)
-                if default_type in _PY_TYPE_MAP:
-                    prop["type"] = _PY_TYPE_MAP[default_type]
-
-            # Merge caller-supplied param metadata.
-            if params and param_name in params:
-                hint = params[param_name]
-                if isinstance(hint, str):
-                    prop["description"] = hint
-                elif isinstance(hint, dict):
-                    prop.update(hint)
-
-            if prop:
-                properties[param_name] = prop
-
-        schema: dict[str, Any] = {
-            "type": "object",
-            "properties": properties,
-        }
-        if required:
-            schema["required"] = required
-
-        tool = RegisteredTool(
-            name=tool_name,
-            description=tool_desc,
-            input_schema=schema,
-            transport=ToolTransport.NATIVE,
-            execute=fn,
-            timeout_seconds=timeout_seconds,
-            source=source,
-            when_to_use=when_to_use,
-            example=example,
-            category=category,
-        )
-        fn.tool = tool  # type: ignore[attr-defined]
-        return fn
-
-    return decorator
-
-
-def _echo_tool(text: str = "") -> str:
-    """Built-in echo tool for testing native tool registration."""
-    return f"echo: {text}"
-
-
-def _validate_tool_args(
-    tool_name: str,
-    args: dict[str, Any],
-    schema: dict[str, Any],
-) -> None:
-    """Validate tool arguments against input schema.
-
-    Checks that all required properties are present and that no
-    unknown properties are passed (when additionalProperties is false).
-    """
-    properties = schema.get("properties", {})
-    required = schema.get("required", [])
-
-    # Check required fields
-    for field_name in required:
-        if field_name not in args:
-            raise ToolError(
-                code="TOOL_INVALID_ARGS",
-                message=f"Tool '{tool_name}' missing required argument: {field_name}",
-                details={"tool": tool_name, "missing": field_name},
-            )
-
-    # Check for unknown arguments (if additionalProperties is explicitly false)
-    if not schema.get("additionalProperties", True) and properties:
-        unknown = set(args) - set(properties)
-        if unknown:
-            raise ToolError(
-                code="TOOL_INVALID_ARGS",
-                message=f"Tool '{tool_name}' received unknown arguments: {unknown}",
-                details={"tool": tool_name, "unknown": list(unknown)},
-            )
+__all__ = [
+    "_DEFAULT_PREAMBLE",
+    "_IDENTITY_ARG_NAMES",
+    "_MEMORY_TOOL_PREFIXES",
+    "_PY_TYPE_MAP",
+    "RegisteredTool",
+    "ToolClassification",
+    "ToolRegistry",
+    "ToolTransport",
+    "_bind_caller_did",
+    "_echo_tool",
+    "_is_memory_tool",
+    "_validate_tool_args",
+    "native_tool",
+]
 
 
 class ToolRegistry:
