@@ -22,6 +22,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from arcui.schemas import ErrorResponse
+
 logger = logging.getLogger(__name__)
 
 # Memory previews kept short — the page renders them as a hover tooltip.
@@ -168,7 +170,10 @@ async def get_knowledge(request: Request) -> JSONResponse:
     state = request.app.state
     agent = _resolve_agent(state, agent_id)
     if agent is None:
-        return JSONResponse({"error": f"agent {agent_id!r} not found"}, status_code=404)
+        return JSONResponse(
+            ErrorResponse(error=f"agent {agent_id!r} not found").model_dump(mode="json"),
+            status_code=404,
+        )
 
     team_root: Path | None = getattr(state, "team_root", None)
     agent_root = _agent_root(team_root, getattr(agent, "name", agent_id))

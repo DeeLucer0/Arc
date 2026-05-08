@@ -24,6 +24,13 @@ from arcui.routes.agent_detail._common import (
     _agent_root,
     _resolve_root_path,
 )
+from arcui.schemas import (
+    ConfigResponse,
+    ErrorResponse,
+    FileReadResponse,
+    FilesTreeEntry,
+    FilesTreeResponse,
+)
 
 
 async def get_config(request: Request) -> JSONResponse:
@@ -38,7 +45,10 @@ async def get_config(request: Request) -> JSONResponse:
     agent_id = request.path_params["id"]
     agent_root = _agent_root(request, agent_id)
     if agent_root is None:
-        return JSONResponse({"error": "Agent not found"}, status_code=404)
+        return JSONResponse(
+            ErrorResponse(error="Agent not found").model_dump(mode="json"),
+            status_code=404,
+        )
 
     try:
         content = fs_reader.read_file(
@@ -49,21 +59,30 @@ async def get_config(request: Request) -> JSONResponse:
             caller_did=_CALLER_DID,
         )
     except FileNotFoundError:
-        return JSONResponse({"error": "arcagent.toml not found"}, status_code=404)
+        return JSONResponse(
+            ErrorResponse(error="arcagent.toml not found").model_dump(mode="json"),
+            status_code=404,
+        )
     except (PathTraversalError, FileTooLargeError) as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse(
+            ErrorResponse(error=str(exc)).model_dump(mode="json"),
+            status_code=400,
+        )
 
     try:
         parsed = tomllib.loads(content.content)
     except tomllib.TOMLDecodeError as exc:
-        return JSONResponse({"error": f"invalid toml: {exc}"}, status_code=500)
+        return JSONResponse(
+            ErrorResponse(error=f"invalid toml: {exc}").model_dump(mode="json"),
+            status_code=500,
+        )
 
     return JSONResponse(
-        {
-            "config": _whitelist_config(parsed),
-            "raw": content.content,
-            "mtime": content.mtime,
-        }
+        ConfigResponse(
+            config=_whitelist_config(parsed),
+            raw=content.content,
+            mtime=content.mtime,
+        ).model_dump(mode="json")
     )
 
 
@@ -76,7 +95,10 @@ async def get_files_tree(request: Request) -> JSONResponse:
     agent_id = request.path_params["id"]
     agent_root = _agent_root(request, agent_id)
     if agent_root is None:
-        return JSONResponse({"error": "Agent not found"}, status_code=404)
+        return JSONResponse(
+            ErrorResponse(error="Agent not found").model_dump(mode="json"),
+            status_code=404,
+        )
 
     root_arg, err = safe_choice(
         request.query_params.get("root", "workspace"),
@@ -96,16 +118,19 @@ async def get_files_tree(request: Request) -> JSONResponse:
             caller_did=_CALLER_DID,
         )
     except PathTraversalError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse(
+            ErrorResponse(error=str(exc)).model_dump(mode="json"),
+            status_code=400,
+        )
 
     return JSONResponse(
-        {
-            "root": root_arg,
-            "entries": [
-                {"path": e.path, "type": e.type, "size": e.size, "mtime": e.mtime}
+        FilesTreeResponse(
+            root=root_arg,
+            entries=[
+                FilesTreeEntry(path=e.path, type=e.type, size=e.size, mtime=e.mtime)
                 for e in entries
             ],
-        }
+        ).model_dump(mode="json")
     )
 
 
@@ -113,11 +138,17 @@ async def get_file_read(request: Request) -> JSONResponse:
     agent_id = request.path_params["id"]
     agent_root = _agent_root(request, agent_id)
     if agent_root is None:
-        return JSONResponse({"error": "Agent not found"}, status_code=404)
+        return JSONResponse(
+            ErrorResponse(error="Agent not found").model_dump(mode="json"),
+            status_code=404,
+        )
 
     rel = request.query_params.get("path")
     if not rel:
-        return JSONResponse({"error": "Missing path"}, status_code=400)
+        return JSONResponse(
+            ErrorResponse(error="Missing path").model_dump(mode="json"),
+            status_code=400,
+        )
 
     root_arg, err = safe_choice(
         request.query_params.get("root", "workspace"),
@@ -138,18 +169,27 @@ async def get_file_read(request: Request) -> JSONResponse:
             caller_did=_CALLER_DID,
         )
     except FileNotFoundError:
-        return JSONResponse({"error": "File not found"}, status_code=404)
+        return JSONResponse(
+            ErrorResponse(error="File not found").model_dump(mode="json"),
+            status_code=404,
+        )
     except PathTraversalError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse(
+            ErrorResponse(error=str(exc)).model_dump(mode="json"),
+            status_code=400,
+        )
     except FileTooLargeError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=413)
+        return JSONResponse(
+            ErrorResponse(error=str(exc)).model_dump(mode="json"),
+            status_code=413,
+        )
 
     return JSONResponse(
-        {
-            "path": content.path,
-            "size": content.size,
-            "mtime": content.mtime,
-            "content": content.content,
-            "content_type": content.content_type,
-        }
+        FileReadResponse(
+            path=content.path,
+            size=content.size,
+            mtime=content.mtime,
+            content=content.content,
+            content_type=content.content_type,
+        ).model_dump(mode="json")
     )

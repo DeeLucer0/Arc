@@ -19,6 +19,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from arcui.schemas import ErrorResponse
+
 logger = logging.getLogger(__name__)
 
 # Allowlist of valid top-level and nested config keys.
@@ -159,9 +161,15 @@ async def get_arcllm_config(request: Request) -> JSONResponse:
     """
     config_path = _get_config_path()
     if config_path is None:
-        return JSONResponse({"error": "arcllm not installed"}, status_code=503)
+        return JSONResponse(
+            ErrorResponse(error="arcllm not installed").model_dump(mode="json"),
+            status_code=503,
+        )
     if not config_path.exists():
-        return JSONResponse({"error": "arcllm config.toml not found"}, status_code=404)
+        return JSONResponse(
+            ErrorResponse(error="arcllm config.toml not found").model_dump(mode="json"),
+            status_code=404,
+        )
 
     try:
         data = _read_config(config_path)
@@ -172,7 +180,10 @@ async def get_arcllm_config(request: Request) -> JSONResponse:
         return JSONResponse(plain)
     except (OSError, tomlkit.exceptions.ParseError):
         logger.exception("Failed to read arcllm config")
-        return JSONResponse({"error": "Failed to read config"}, status_code=500)
+        return JSONResponse(
+            ErrorResponse(error="Failed to read config").model_dump(mode="json"),
+            status_code=500,
+        )
 
 
 async def patch_arcllm_config(request: Request) -> JSONResponse:
@@ -185,30 +196,51 @@ async def patch_arcllm_config(request: Request) -> JSONResponse:
     Uses atomic write (temp file + rename) to prevent corruption.
     """
     if request.state.role != "operator":
-        return JSONResponse({"error": "Operator role required"}, status_code=403)
+        return JSONResponse(
+            ErrorResponse(error="Operator role required").model_dump(mode="json"),
+            status_code=403,
+        )
 
     config_path = _get_config_path()
     if config_path is None:
-        return JSONResponse({"error": "arcllm not installed"}, status_code=503)
+        return JSONResponse(
+            ErrorResponse(error="arcllm not installed").model_dump(mode="json"),
+            status_code=503,
+        )
     if not config_path.exists():
-        return JSONResponse({"error": "arcllm config.toml not found"}, status_code=404)
+        return JSONResponse(
+            ErrorResponse(error="arcllm config.toml not found").model_dump(mode="json"),
+            status_code=404,
+        )
 
     body = await request.body()
     if len(body) > 65_536:  # 64KB max
-        return JSONResponse({"error": "Request body too large"}, status_code=413)
+        return JSONResponse(
+            ErrorResponse(error="Request body too large").model_dump(mode="json"),
+            status_code=413,
+        )
 
     try:
         updates = json.loads(body)
     except (json.JSONDecodeError, ValueError):
-        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+        return JSONResponse(
+            ErrorResponse(error="Invalid JSON body").model_dump(mode="json"),
+            status_code=400,
+        )
 
     if not isinstance(updates, dict):
-        return JSONResponse({"error": "Body must be a JSON object"}, status_code=400)
+        return JSONResponse(
+            ErrorResponse(error="Body must be a JSON object").model_dump(mode="json"),
+            status_code=400,
+        )
 
     # Validate keys against allowlist (NIST SI-10)
     error = _validate_updates(updates)
     if error:
-        return JSONResponse({"error": error}, status_code=400)
+        return JSONResponse(
+            ErrorResponse(error=error).model_dump(mode="json"),
+            status_code=400,
+        )
 
     try:
         # Read existing config with tomlkit (preserves comments)

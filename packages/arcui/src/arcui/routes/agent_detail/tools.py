@@ -13,6 +13,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from arcui.routes.agent_detail._common import _CALLER_DID, _agent_root
+from arcui.schemas import ErrorResponse, ToolsResponse
 
 _BUILTIN_TOOLS: tuple[tuple[str, str, str], ...] = (
     ("read", "read_only", "Read a file from disk and return its text content."),
@@ -163,7 +164,10 @@ async def get_tools(request: Request) -> JSONResponse:
     agent_id = request.path_params["id"]
     agent_root = _agent_root(request, agent_id)
     if agent_root is None:
-        return JSONResponse({"error": "Agent not found"}, status_code=404)
+        return JSONResponse(
+            ErrorResponse(error="Agent not found").model_dump(mode="json"),
+            status_code=404,
+        )
 
     # Live registration — only available when the agent is connected.
     registry = request.app.state.agent_registry
@@ -233,9 +237,9 @@ async def get_tools(request: Request) -> JSONResponse:
     tools = list(seen.values())
 
     return JSONResponse(
-        {
-            "tools": tools,
-            "allowlist": allowlist,
-            "denylist": denylist,
-        }
+        ToolsResponse(
+            tools=tools,
+            allowlist=allowlist,
+            denylist=denylist,
+        ).model_dump(mode="json")
     )

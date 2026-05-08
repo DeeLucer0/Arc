@@ -32,6 +32,13 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from arcui.query_validators import safe_int
+from arcui.schemas import (
+    AuditEventsResponse,
+    PolicyBulletsResponse,
+    TasksResponse,
+    TeamPolicyStatsResponse,
+    TeamToolsSkillsResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +182,7 @@ async def get_policy_bullets(request: Request) -> JSONResponse:
             d = _bullet_to_dict(b)
             d["agent_id"] = entry.agent_id
             out.append(d)
-    return JSONResponse({"bullets": out})
+    return JSONResponse(PolicyBulletsResponse(bullets=out).model_dump(mode="json"))
 
 
 async def get_policy_stats(request: Request) -> JSONResponse:
@@ -209,13 +216,13 @@ async def get_policy_stats(request: Request) -> JSONResponse:
         score_sum += sum(b.score for b in bullets if not b.retired)
 
     return JSONResponse(
-        {
-            "total": total,
-            "active": active,
-            "retired": retired,
-            "avg_score": (score_sum / active) if active else 0.0,
-            "per_agent": per_agent,
-        }
+        TeamPolicyStatsResponse(
+            total=total,
+            active=active,
+            retired=retired,
+            avg_score=(score_sum / active) if active else 0.0,
+            per_agent=per_agent,
+        ).model_dump(mode="json")
     )
 
 
@@ -260,7 +267,7 @@ async def get_tasks(request: Request) -> JSONResponse:
             task = dict(task)
             task["agent_id"] = entry.agent_id
             out.append(task)
-    return JSONResponse({"tasks": out})
+    return JSONResponse(TasksResponse(tasks=out).model_dump(mode="json"))
 
 
 def _read_agent_json_array(entry: Any, rel_path: str) -> list[dict[str, Any]]:
@@ -312,10 +319,10 @@ async def get_tools_skills(request: Request) -> JSONResponse:
                 existing["agents"].append(entry.agent_id)
 
     return JSONResponse(
-        {
-            "skills": skills,
-            "tools": list(tools_by_name.values()),
-        }
+        TeamToolsSkillsResponse(
+            skills=skills,
+            tools=list(tools_by_name.values()),
+        ).model_dump(mode="json")
     )
 
 
@@ -386,7 +393,7 @@ async def get_audit(request: Request) -> JSONResponse:
     if err is not None:
         return err
     events = list(buffer)[-limit:]
-    return JSONResponse({"events": events})
+    return JSONResponse(AuditEventsResponse(events=events).model_dump(mode="json"))
 
 
 routes = [

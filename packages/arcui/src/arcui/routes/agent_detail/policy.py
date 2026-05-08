@@ -11,41 +11,60 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from arcui.routes.agent_detail._common import _CALLER_DID, _agent_root
+from arcui.schemas import (
+    ErrorResponse,
+    PolicyBulletsResponse,
+    PolicyResponse,
+    PolicyStatsResponse,
+)
 
 
 async def get_policy(request: Request) -> JSONResponse:
     agent_id = request.path_params["id"]
     agent_root = _agent_root(request, agent_id)
     if agent_root is None:
-        return JSONResponse({"error": "Agent not found"}, status_code=404)
+        return JSONResponse(
+            ErrorResponse(error="Agent not found").model_dump(mode="json"),
+            status_code=404,
+        )
 
     workspace = agent_root / "workspace"
     raw, err = _read_policy(agent_id, workspace)
     if err is not None:
         return err
     bullets = [_bullet_to_dict(b) for b in policy_parser.parse_bullets(raw)]
-    return JSONResponse({"raw": raw, "bullets": bullets})
+    return JSONResponse(
+        PolicyResponse(raw=raw, bullets=bullets).model_dump(mode="json")
+    )
 
 
 async def get_policy_bullets(request: Request) -> JSONResponse:
     agent_id = request.path_params["id"]
     agent_root = _agent_root(request, agent_id)
     if agent_root is None:
-        return JSONResponse({"error": "Agent not found"}, status_code=404)
+        return JSONResponse(
+            ErrorResponse(error="Agent not found").model_dump(mode="json"),
+            status_code=404,
+        )
 
     workspace = agent_root / "workspace"
     raw, err = _read_policy(agent_id, workspace)
     if err is not None:
         return err
     bullets = [_bullet_to_dict(b) for b in policy_parser.parse_bullets(raw)]
-    return JSONResponse({"bullets": bullets})
+    return JSONResponse(
+        PolicyBulletsResponse(bullets=bullets).model_dump(mode="json")
+    )
 
 
 async def get_policy_stats(request: Request) -> JSONResponse:
     agent_id = request.path_params["id"]
     agent_root = _agent_root(request, agent_id)
     if agent_root is None:
-        return JSONResponse({"error": "Agent not found"}, status_code=404)
+        return JSONResponse(
+            ErrorResponse(error="Agent not found").model_dump(mode="json"),
+            status_code=404,
+        )
 
     workspace = agent_root / "workspace"
     raw, err = _read_policy(agent_id, workspace)
@@ -56,12 +75,12 @@ async def get_policy_stats(request: Request) -> JSONResponse:
     retired = [b for b in bullets if b.retired]
     avg = sum(b.score for b in active) / len(active) if active else 0.0
     return JSONResponse(
-        {
-            "total": len(bullets),
-            "active": len(active),
-            "retired": len(retired),
-            "avg_score": avg,
-        }
+        PolicyStatsResponse(
+            total=len(bullets),
+            active=len(active),
+            retired=len(retired),
+            avg_score=avg,
+        ).model_dump(mode="json")
     )
 
 
@@ -77,7 +96,10 @@ def _read_policy(agent_id: str, workspace: Path) -> tuple[str, JSONResponse | No
     except FileNotFoundError:
         return "", None  # missing policy is treated as empty, not an error
     except (PathTraversalError, FileTooLargeError) as exc:
-        return "", JSONResponse({"error": str(exc)}, status_code=400)
+        return "", JSONResponse(
+            ErrorResponse(error=str(exc)).model_dump(mode="json"),
+            status_code=400,
+        )
     return content.content, None
 
 

@@ -16,6 +16,7 @@ from arcui.routes.agent_detail._common import (
     _agent_root,
     logger,
 )
+from arcui.schemas import ErrorResponse, SkillsResponse
 
 
 def _scan_skills_dir(
@@ -85,7 +86,10 @@ async def get_skills(request: Request) -> JSONResponse:
     agent_id = request.path_params["id"]
     agent_root = _agent_root(request, agent_id)
     if agent_root is None:
-        return JSONResponse({"error": "Agent not found"}, status_code=404)
+        return JSONResponse(
+            ErrorResponse(error="Agent not found").model_dump(mode="json"),
+            status_code=404,
+        )
 
     # Pull skills from every standard location the agent could have them:
     #   - team/<agent>/workspace/skills/      (agent-authored runtime skills)
@@ -136,7 +140,7 @@ async def get_skills(request: Request) -> JSONResponse:
     except Exception:  # reason: fail-open — log + continue
         logger.debug("builtin skills scan failed", exc_info=True)
 
-    return JSONResponse({"skills": skills})
+    return JSONResponse(SkillsResponse(skills=skills).model_dump(mode="json"))
 
 
 def _parse_skill(rel_path: str, text: str) -> dict[str, Any]:

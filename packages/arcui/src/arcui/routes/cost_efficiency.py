@@ -10,6 +10,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from arcui.query_validators import safe_choice
+from arcui.schemas import ErrorResponse
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,10 @@ async def get_cost_efficiency(request: Request) -> JSONResponse:
     """GET /api/cost-efficiency — per-model cost efficiency ranking."""
     aggregator = request.app.state.aggregator
     if aggregator is None:
-        return JSONResponse({"error": "No aggregator configured"}, status_code=404)
+        return JSONResponse(
+            ErrorResponse(error="No aggregator configured").model_dump(mode="json"),
+            status_code=404,
+        )
 
     window, err = safe_choice(
         request.query_params.get("window", "24h"),

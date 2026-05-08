@@ -11,6 +11,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from arcui.query_validators import safe_choice, safe_int
+from arcui.schemas import ErrorResponse, ExportTracesResponse
 
 _MAX_EXPORT_LIMIT = 10000
 
@@ -36,7 +37,10 @@ async def export_traces(request: Request) -> Response:
 
     store = request.app.state.trace_store
     if store is None:
-        return JSONResponse({"error": "No trace store configured"}, status_code=404)
+        return JSONResponse(
+            ErrorResponse(error="No trace store configured").model_dump(mode="json"),
+            status_code=404,
+        )
 
     records, _ = await store.query(limit=limit)
     rows = [r.model_dump() for r in records]
@@ -60,7 +64,9 @@ async def export_traces(request: Request) -> Response:
             headers={"Content-Disposition": "attachment; filename=traces.csv"},
         )
 
-    return JSONResponse({"traces": rows, "count": len(rows)})
+    return JSONResponse(
+        ExportTracesResponse(traces=rows, count=len(rows)).model_dump(mode="json")
+    )
 
 
 routes = [

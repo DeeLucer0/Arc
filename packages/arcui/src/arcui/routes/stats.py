@@ -10,6 +10,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from arcui.aggregator import RollingAggregator
+from arcui.schemas import ErrorResponse
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,10 @@ def _get_aggregator_for_request(
     if agent_id is not None:
         registry = getattr(request.app.state, "agent_registry", None)
         if registry is None:
-            return None, JSONResponse({"error": "Agent registry not available"}, status_code=404)
+            return None, JSONResponse(
+                ErrorResponse(error="Agent registry not available").model_dump(mode="json"),
+                status_code=404,
+            )
         entry = registry.get(agent_id)
         if entry is None or entry.aggregator is None:
             # Offline agent (or one whose aggregator wasn't initialised
@@ -76,11 +80,19 @@ async def get_stats(request: Request) -> JSONResponse:
     if err is not None:
         return err
     if aggregator is None:
-        return JSONResponse({"error": "No aggregator configured"}, status_code=404)
+        return JSONResponse(
+            ErrorResponse(error="No aggregator configured").model_dump(mode="json"),
+            status_code=404,
+        )
 
     window = _validated_window(request)
     if window is None:
-        return JSONResponse({"error": "Invalid window. Use 1h, 24h, 7d, or 30d."}, status_code=400)
+        return JSONResponse(
+            ErrorResponse(
+                error="Invalid window. Use 1h, 24h, 7d, or 30d."
+            ).model_dump(mode="json"),
+            status_code=400,
+        )
     data = aggregator.stats(window)
     await _publish(request, "stats", data)
     return JSONResponse(data)
@@ -95,11 +107,19 @@ async def get_timeseries(request: Request) -> JSONResponse:
     if err is not None:
         return err
     if aggregator is None:
-        return JSONResponse({"error": "No aggregator configured"}, status_code=404)
+        return JSONResponse(
+            ErrorResponse(error="No aggregator configured").model_dump(mode="json"),
+            status_code=404,
+        )
 
     window = _validated_window(request)
     if window is None:
-        return JSONResponse({"error": "Invalid window. Use 1h, 24h, 7d, or 30d."}, status_code=400)
+        return JSONResponse(
+            ErrorResponse(
+                error="Invalid window. Use 1h, 24h, 7d, or 30d."
+            ).model_dump(mode="json"),
+            status_code=400,
+        )
     data = aggregator.timeseries(window)
     await _publish(request, "stats.timeseries", data)
     return JSONResponse(data)
@@ -136,11 +156,19 @@ async def get_performance(request: Request) -> JSONResponse:
     if err is not None:
         return err
     if aggregator is None:
-        return JSONResponse({"error": "No aggregator configured"}, status_code=404)
+        return JSONResponse(
+            ErrorResponse(error="No aggregator configured").model_dump(mode="json"),
+            status_code=404,
+        )
 
     window = _validated_window(request)
     if window is None:
-        return JSONResponse({"error": "Invalid window. Use 1h, 24h, 7d, or 30d."}, status_code=400)
+        return JSONResponse(
+            ErrorResponse(
+                error="Invalid window. Use 1h, 24h, 7d, or 30d."
+            ).model_dump(mode="json"),
+            status_code=400,
+        )
     data = aggregator.performance(window)
     await _publish(request, "performance", data)
     return JSONResponse(data)

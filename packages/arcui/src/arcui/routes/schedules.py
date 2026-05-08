@@ -15,6 +15,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from arcui.schemas import AuditEventsResponse
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_LIMIT = 5
@@ -56,11 +58,11 @@ async def schedule_history(request: Request) -> JSONResponse:
     """
     history = getattr(request.app.state, "schedule_history", None)
     if history is None:
-        return JSONResponse({"events": []})
+        return JSONResponse(AuditEventsResponse(events=[]).model_dump(mode="json"))
     limit = _parse_limit(request.query_params.get("limit"))
     # deque is oldest→newest; return newest-first.
     events = list(history)[-limit:][::-1]
-    data = {"events": events}
+    data = AuditEventsResponse(events=events).model_dump(mode="json")
     await _publish(request, "schedule_history", data)
     return JSONResponse(data)
 
