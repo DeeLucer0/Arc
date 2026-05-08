@@ -596,9 +596,9 @@ Each chunk is 3 notebooks dispatched in parallel. **Chunks must run in order** b
 | 5.2.16 | arcagent/04-module-bus-events | CREATE | C04 | done | 65 cells, 68KB, 10 sections |
 | 5.1.14 | arcrun/01-core-react | REWRITE | C04 | done | 75 cells, 51KB, 13 sections |
 | 5.2.7 | arcrun/06-task-completion-budgets | CREATE | C04 | done | 48 cells, 52KB, 12 sections |
-| 5.1.15 | arcrun/02-tool-executor | REWRITE | C05 | pending | High-risk |
-| 5.2.5 | arcrun/04-streaming | CREATE | C05 | pending | |
-| 5.2.6 | arcrun/05-parallel-dispatch | CREATE | C05 | pending | |
+| 5.1.15 | arcrun/02-tool-executor | REWRITE | C05 | done | 66 cells, 59KB, 11 sections |
+| 5.2.5 | arcrun/04-streaming | CREATE | C05 | done | 61 cells, 46KB, 12 sections |
+| 5.2.6 | arcrun/05-parallel-dispatch | CREATE | C05 | done | 55 cells, 41KB, 11 sections |
 | 5.1.16 | arcrun/03-codeexec | REWRITE | C06 | pending | |
 | 5.2.8 | arcrun/07-event-chain-verification | CREATE | C06 | pending | |
 | 5.1.4 | arcllm/04-agentic-loop | REWRITE | C06 | pending | High-risk |
