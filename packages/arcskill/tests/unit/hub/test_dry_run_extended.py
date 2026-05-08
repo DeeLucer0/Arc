@@ -1,7 +1,6 @@
 """Extended tests for arcskill.hub.dry_run — covering uncovered branches.
 
 Targets:
-- run_dry_run: skip_sandbox path
 - _find_fixture_command: MODULE.yaml present with test_fixture, skill.py fallback,
   __init__.py fallback, main.py fallback, no Python file fallback,
   MODULE.yaml parse failure fallback, MODULE.yaml missing test_fixture key
@@ -34,7 +33,6 @@ from arcskill.hub.dry_run import (
     _run_docker,
     _run_firecracker,
     _safe_extract,
-    run_dry_run,
 )
 from arcskill.hub.errors import SandboxRequired
 
@@ -73,32 +71,6 @@ def _make_tarball(files: dict[str, str], *, with_traversal: bool = False) -> Pat
             tf.addfile(info, io.BytesIO(data))
 
     return bundle
-
-
-# ---------------------------------------------------------------------------
-# run_dry_run — skip_sandbox path
-# ---------------------------------------------------------------------------
-
-
-def test_run_dry_run_skip_sandbox_raises_at_personal() -> None:
-    """skip_sandbox=True + non-federal → SandboxRequired (bypass removed).
-
-    Tier controls which backend runs, not whether to sandbox.
-    """
-    bundle = _make_tarball({"skill.py": "# skill\n"})
-    config = _personal_config()
-
-    with pytest.raises(SandboxRequired, match="skip_sandbox=True is not permitted"):
-        run_dry_run(bundle, config, skip_sandbox=True)
-
-
-def test_run_dry_run_skip_sandbox_raises_at_federal() -> None:
-    """skip_sandbox=True raises SandboxRequired at federal tier too."""
-    bundle = _make_tarball({"skill.py": "# skill\n"})
-    config = _federal_config()
-
-    with pytest.raises(SandboxRequired):
-        run_dry_run(bundle, config, skip_sandbox=True)
 
 
 # ---------------------------------------------------------------------------

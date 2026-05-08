@@ -142,8 +142,9 @@ class DryRunResult(BaseModel):
     backend_used:
         ``"firecracker"``, ``"docker"``, or ``"skipped"`` (local/test mode).
     skipped:
-        True when sandbox was skipped (only allowed at non-federal tiers in
-        test mode via the ``skip_sandbox`` override flag).
+        True when sandbox execution was skipped — set only when no backend
+        was available and SandboxRequired wasn't raised (no caller path
+        currently produces this in production; retained for typing).
     duration_s:
         Wall-clock seconds for the dry-run (0.0 when skipped).
     vm_id:
@@ -637,7 +638,7 @@ class FirecrackerSandbox:
 
 
 # ---------------------------------------------------------------------------
-# Public API — run_dry_run (backward-compatible entry point)
+# Public API — run_dry_run
 # ---------------------------------------------------------------------------
 
 
@@ -645,15 +646,13 @@ def run_dry_run(
     bundle_path: Path,
     config: HubConfig,
     *,
-    skip_sandbox: bool = False,
     audit_sink: Any | None = None,
 ) -> DryRunResult:
     """Execute a sandboxed dry-run of the skill bundle.
 
     Sandbox runs at ALL tiers.  Tier controls *which* backend is used
     (Firecracker at federal, Docker/subprocess elsewhere), not *whether*
-    to sandbox.  Passing ``skip_sandbox=True`` now raises ``SandboxRequired``
-    at every tier — the previous non-federal bypass has been removed.
+    to sandbox.
 
     Parameters
     ----------
@@ -661,11 +660,6 @@ def run_dry_run(
         Path to the ``.tar.gz`` skill bundle.
     config:
         Hub configuration (tier determines isolation backend).
-    skip_sandbox:
-        Deprecated.  Formerly allowed skipping the sandbox at non-federal
-        tiers.  Now raises ``SandboxRequired`` at ALL tiers regardless of
-        tier level.  Callers in CI should mock ``is_firecracker_available``
-        and ``_docker_available`` instead.
     audit_sink:
         Optional arctrust AuditSink for emitting structured audit events.
 
@@ -677,20 +671,8 @@ def run_dry_run(
     Raises
     ------
     SandboxRequired
-        If ``skip_sandbox=True`` is passed, or if the required sandbox
-        backend is unavailable.
+        If the required sandbox backend is unavailable for the configured tier.
     """
-    if skip_sandbox:
-        # Bypass 3 removed: skip_sandbox is never allowed at any tier.
-        # Tier controls which backend runs, not whether the sandbox runs.
-        raise SandboxRequired(
-            "skip_sandbox=True is not permitted at any tier. "
-            "Sandbox must run at all tiers; tier determines the backend "
-            "(Firecracker at federal, Docker/subprocess at enterprise/personal). "
-            "In tests, mock is_firecracker_available() and _docker_available() "
-            "instead of using skip_sandbox."
-        )
-
     with tempfile.TemporaryDirectory(prefix="arcskill_dryrun_") as tmpdir:
         extract_dir = Path(tmpdir) / "skill"
         extract_dir.mkdir()

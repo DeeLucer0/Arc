@@ -1,9 +1,13 @@
 """EventBuffer — bounded deque with periodic flush to ConnectionManager.
 
 Batches incoming events and flushes to WebSocket clients every 100ms.
-Supports both raw dicts (legacy) and UIEvent objects (multi-agent).
-When a SubscriptionManager is provided, UIEvents are broadcast with
-server-side filtering instead of going through ConnectionManager.
+Two payload shapes are accepted:
+
+- ``dict`` — used by ``attach_llm`` for TraceRecord-style telemetry; goes
+  out via ``ConnectionManager.broadcast`` as one batched ``event_batch``.
+- ``UIEvent`` — used by the multi-agent reporter and bridge; goes through
+  ``SubscriptionManager.broadcast_filtered`` when one is wired, otherwise
+  falls back to a per-event ``ConnectionManager.broadcast``.
 """
 
 from __future__ import annotations
@@ -27,7 +31,7 @@ class EventBuffer:
 
     Events are pushed via push(), accumulated in a deque, and flushed
     every flush_interval_ms. UIEvent objects go through SubscriptionManager
-    for filtered delivery; raw dicts use ConnectionManager.broadcast.
+    for filtered delivery; dicts use ConnectionManager.broadcast.
     """
 
     def __init__(
@@ -45,7 +49,7 @@ class EventBuffer:
         self._task: asyncio.Task[None] | None = None
 
     def push(self, data: dict[str, Any] | UIEvent) -> None:
-        """Add an event to the buffer. Accepts raw dicts or UIEvent."""
+        """Add an event to the buffer. Accepts a dict or UIEvent."""
         self._buffer.append(data)
 
     def flush_once(self) -> None:

@@ -149,7 +149,6 @@ def test_full_pipeline_success() -> None:
                 config,
                 install_base=install_base,
                 lock_path=lock_path,
-                skip_sandbox=True,
             )
 
         assert result.success is True
@@ -223,7 +222,6 @@ def test_pipeline_fails_on_scan_verdict_dangerous() -> None:
                 config,
                 install_base=install_base,
                 lock_path=lock_path,
-                skip_sandbox=True,
             )
 
         assert result.success is False
@@ -384,7 +382,6 @@ def test_update_marks_already_up_to_date() -> None:
                 config,
                 install_base=install_base,
                 lock_path=lock_path,
-                skip_sandbox=True,
             )
 
         assert result.success is True

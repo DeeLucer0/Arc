@@ -353,13 +353,6 @@ class TestChildIdentity:
         c2 = derive_child_identity(parent_sk_bytes=sk2, spawn_id="same-nonce")
         assert c1.did != c2.did
 
-    def test_positional_api_still_works(self) -> None:
-        """Legacy positional call style must still work for arcrun compatibility."""
-        parent_sk = SigningKey.generate().encode()
-        child = derive_child_identity(parent_sk, "my-nonce", 300)
-        assert child.did.startswith("did:arc:delegate:child/")
-        assert child.ttl_s == 300
-
     def test_ttl_default(self) -> None:
         parent_sk = SigningKey.generate().encode()
         child = derive_child_identity(parent_sk_bytes=parent_sk, spawn_id="x")

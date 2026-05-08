@@ -486,45 +486,6 @@ def _canonical_json_payload(*, meta: dict[str, Any], backends: list[Any]) -> byt
 
 
 # ---------------------------------------------------------------------------
-# Legacy helper kept for the existing test suite
-# ---------------------------------------------------------------------------
-
-
-def _enforce_federal_manifest(
-    name: str,
-    *,
-    allowed_backends: dict[str, str] | None,
-) -> None:
-    """Raise unless ``name`` is in the (unsigned) allowed_backends dict.
-
-    Preserved for unit tests that exercise the dict-based gate directly.
-    Note: this helper is no longer called from ``load_backend`` — all tiers
-    now hard-fail if no signed manifest is provided (Phase C, SPEC-018 HIGH-3).
-    Non-federal callers and tests may still invoke this directly.
-    """
-    if allowed_backends is None:
-        _emit_denied_log(name, tier="federal", reason="no allowed_backends manifest provided")
-        raise BackendSignatureError(
-            f"Federal tier requires an allowed_backends manifest.  "
-            f"Backend '{name}' cannot be loaded without one."
-        )
-
-    if name not in allowed_backends:
-        _emit_denied_log(name, tier="federal", reason=f"'{name}' not in allowed_backends manifest")
-        raise BackendSignatureError(
-            f"Backend '{name}' is not in the allowed_backends manifest.  "
-            "Add it under [[executor.allowed_backends]] in arcrun.toml."
-        )
-
-    logger.debug(
-        "Federal manifest (unsigned path): backend '%s' is listed.  "
-        "For production use, switch to a signed manifest via "
-        "load_backend(manifest_path=...).",
-        name,
-    )
-
-
-# ---------------------------------------------------------------------------
 # Audit helpers — emit AuditEvents via arctrust, fall back to logger
 # ---------------------------------------------------------------------------
 
@@ -565,16 +526,6 @@ def _emit_denied(name: str, *, tier: str, reason: str, sink: Any | None) -> None
             extra={"reason": reason},
             sink=sink,
         )
-
-
-def _emit_denied_log(name: str, *, tier: str, reason: str) -> None:
-    """Logger-only denied event used by legacy _enforce_federal_manifest."""
-    logger.warning(
-        "executor.backend.denied name=%s tier=%s reason=%s",
-        name,
-        tier,
-        reason,
-    )
 
 
 def _emit_sig_verified(*, manifest_path: Path, issuer_did: str, sink: Any | None) -> None:

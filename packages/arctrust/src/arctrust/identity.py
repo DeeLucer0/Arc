@@ -370,57 +370,43 @@ class ChildIdentity(BaseModel):
 
 
 def derive_child_identity(
-    parent_sk: bytes = b"",
-    nonce: str = "",
-    ttl_s: int = 300,
     *,
-    parent_sk_bytes: bytes | None = None,
-    spawn_id: str | None = None,
+    parent_sk_bytes: bytes,
+    spawn_id: str,
     wallclock_timeout_s: float | None = None,
 ) -> ChildIdentity:
-    """Derive a deterministic child identity from parent secret key and nonce.
-
-    Accepts both positional and keyword-only call styles for compatibility
-    with the arcrun spawn module:
-      - Positional: ``derive_child_identity(parent_sk, nonce, ttl_s)``
-      - Keyword:    ``derive_child_identity(parent_sk_bytes=..., spawn_id=...)``
+    """Derive a deterministic child identity from parent secret key and spawn id.
 
     Uses HKDF-SHA256 (simplified): PRK = HMAC-SHA256(salt, IKM),
     then T(1) = HMAC-SHA256(PRK, info || 0x01). The child seed is 32 bytes.
 
     Security:
     - ASI-03: child key is unique and unpredictable to anyone without parent SK.
-    - Child key cannot be reused — nonce must be unique per spawn.
+    - Child key cannot be reused — spawn_id must be unique per spawn.
 
     Args:
-        parent_sk: Parent's Ed25519 private key bytes (positional).
-        nonce: Per-spawn nonce (positional).
-        ttl_s: TTL in seconds (positional).
-        parent_sk_bytes: Parent's Ed25519 private key bytes (keyword, wins over positional).
-        spawn_id: Per-spawn nonce (keyword, wins over positional).
-        wallclock_timeout_s: TTL in seconds (keyword, wins over positional).
+        parent_sk_bytes: Parent's Ed25519 private key bytes.
+        spawn_id: Per-spawn nonce (typically a UUID).
+        wallclock_timeout_s: TTL in seconds. Defaults to 300 when None.
 
     Returns:
         ChildIdentity with derived DID and 32-byte signing key.
     """
-    # Keyword forms win when both provided (backward compat with arcrun API)
-    effective_sk = parent_sk_bytes if parent_sk_bytes is not None else parent_sk
-    effective_nonce = spawn_id if spawn_id is not None else nonce
-    effective_ttl = int(wallclock_timeout_s) if wallclock_timeout_s is not None else ttl_s
+    ttl = int(wallclock_timeout_s) if wallclock_timeout_s is not None else 300
 
     # HKDF-SHA256 expand step
     # PRK = HMAC-SHA256(salt="arc.spawn", IKM=parent_sk)
-    # T(1) = HMAC-SHA256(PRK, info=nonce_bytes || 0x01)
+    # T(1) = HMAC-SHA256(PRK, info=spawn_id_bytes || 0x01)
     salt = b"arc.spawn"
-    info = effective_nonce.encode("utf-8")
-    prk = hmac.new(salt, effective_sk, hashlib.sha256).digest()
+    info = spawn_id.encode("utf-8")
+    prk = hmac.new(salt, parent_sk_bytes, hashlib.sha256).digest()
     child_seed = hmac.new(prk, info + b"\x01", hashlib.sha256).digest()  # 32 bytes
 
     # 8 hex chars = 4 bytes (matches DID format: did:arc:delegate:child/{hex8})
     hex_suffix = child_seed[:4].hex()
     did = f"did:arc:delegate:child/{hex_suffix}"
 
-    return ChildIdentity(did=did, sk_bytes=child_seed, ttl_s=effective_ttl)
+    return ChildIdentity(did=did, sk_bytes=child_seed, ttl_s=ttl)
 
 
 __all__ = [

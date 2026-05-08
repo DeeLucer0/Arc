@@ -12,9 +12,9 @@ Bypass 2 (verify.py): _assert_slsa_predicate_type returns early at non-federal
     → After fix: SLSA predicate type is validated at all tiers (non-federal
       logs a warning for unrecognised types; tampered type triggers SignatureInvalid).
 
-Bypass 3 (dry_run.py): skip_sandbox=True succeeds at non-federal without sandbox
-    → After fix: skip_sandbox raises SandboxRequired at ALL tiers; sandbox
-      always runs; tier determines *which* backend, not *whether* to sandbox.
+Bypass 3 (dry_run.py): originally skip_sandbox=True succeeded at non-federal
+    → After fix: the skip_sandbox parameter is gone; sandbox always runs;
+      tier determines *which* backend, not *whether* to sandbox.
 
 Audit migration:
     verify_bundle and run_dry_run accept an optional ``audit_sink`` parameter.
@@ -376,43 +376,15 @@ def test_bypass2_valid_slsa_predicate_accepted_at_personal() -> None:
 
 
 # ---------------------------------------------------------------------------
-# BYPASS 3 — skip_sandbox must not be honoured at any tier
+# BYPASS 3 — sandbox runs at every tier; skip_sandbox parameter removed
 # ---------------------------------------------------------------------------
-
-
-def test_bypass3_skip_sandbox_raises_at_personal() -> None:
-    """Bypass 3: skip_sandbox=True must raise SandboxRequired at personal tier.
-
-    Post-fix: skip_sandbox is removed or raises at ALL tiers. Tier controls
-    *which* backend runs, not *whether* to sandbox.
-    """
-    bundle = _make_tarball({"skill.py": "# skill\n"})
-    config = _personal_config()
-
-    with unittest.mock.patch("arcskill.hub.dry_run.is_firecracker_available", return_value=False):
-        with unittest.mock.patch("arcskill.hub.dry_run._docker_available", return_value=False):
-            # Post-fix: skip_sandbox=True should raise SandboxRequired, not return
-            # a passed result with skipped=True.
-            with pytest.raises(SandboxRequired):
-                run_dry_run(bundle, config, skip_sandbox=True)
-
-
-def test_bypass3_skip_sandbox_raises_at_enterprise() -> None:
-    """Bypass 3: skip_sandbox=True must raise SandboxRequired at enterprise tier."""
-    bundle = _make_tarball({"skill.py": "# skill\n"})
-    config = _enterprise_config()
-
-    with unittest.mock.patch("arcskill.hub.dry_run.is_firecracker_available", return_value=False):
-        with unittest.mock.patch("arcskill.hub.dry_run._docker_available", return_value=False):
-            with pytest.raises(SandboxRequired):
-                run_dry_run(bundle, config, skip_sandbox=True)
+# Personal/enterprise + no backend = warn + scan-only fallback (covered by
+# test_audit_event_emitted_on_sandbox_unavailable_warning below). Federal +
+# no Firecracker = SandboxRequired (covered in test_dry_run_extended.py).
 
 
 def test_bypass3_sandbox_runs_when_docker_available_at_personal() -> None:
-    """Bypass 3 (positive): when Docker is available, personal tier sandbox runs normally.
-
-    Post-fix: removing skip_sandbox means the Docker path runs when available.
-    """
+    """Bypass 3 (positive): when Docker is available, personal tier sandbox runs normally."""
     bundle = _make_tarball({"skill.py": "# skill\n"})
     config = _personal_config()
 
@@ -540,8 +512,8 @@ def test_audit_event_emitted_on_sandbox_unavailable_warning() -> None:
 
     Post-fix: when Firecracker and Docker are both unavailable at non-federal
     (scan-only fallback path), run_dry_run emits an AuditEvent with
-    outcome='warn' AND the skip_sandbox path has been removed (so the code
-    reaches the fallback, not the early-return).
+    outcome='warn' (the previous skip_sandbox early-return is gone, so the
+    code reaches the fallback path).
     """
     from arctrust import AuditEvent
 

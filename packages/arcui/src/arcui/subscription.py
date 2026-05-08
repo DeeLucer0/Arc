@@ -47,11 +47,13 @@ class SubscriptionManager:
     def matches(self, queue: asyncio.Queue[str], event: UIEvent) -> bool:
         """Check if an event matches a queue's subscription.
 
-        Unregistered queues default to matching everything (backward compat).
+        Fail-open: a queue without a registered subscription matches every
+        event, so a client connecting before its subscription registers
+        does not silently miss data.
         """
         sub = self._subscriptions.get(queue)
         if sub is None:
-            return True  # No subscription = receive all
+            return True
 
         if sub.agents is not None and event.agent_id not in sub.agents:
             return False

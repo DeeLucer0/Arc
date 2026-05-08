@@ -387,29 +387,6 @@ def _entry_to_row(
     )
 
 
-def _insert_entry(
-    conn: sqlite3.Connection,
-    session_id: str,
-    path_str: str,
-    file_offset: int,
-    entry: dict[str, Any],
-) -> None:
-    """Insert a single JSONL entry. Kept for backward compatibility."""
-    row = _entry_to_row(session_id, path_str, file_offset, entry)
-    if row is None:
-        return
-
-    conn.execute(
-        """
-        INSERT INTO messages(
-            session_id, user_did, agent_did, classification,
-            role, ts, content, jsonl_path, jsonl_offset
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        row,
-    )
-
-
 def _run_search(
     conn: sqlite3.Connection,
     q: str,

@@ -226,12 +226,10 @@ class Retriever:
                 return f"team/{rel}"
             except ValueError:
                 pass
-        # Try memory_dir first (backward compat)
         try:
             return str(path.relative_to(self._memory_dir))
         except ValueError:
             pass
-        # Try workspace
         try:
             return str(path.relative_to(self._workspace))
         except ValueError:

@@ -90,7 +90,6 @@ def _base_ctx(
         config=_personal_config(),
         install_base=tmpdir / "skills",
         lock_path=tmpdir / "lock.json",
-        skip_sandbox=True,
         quarantine_dir=quarantine_dir,
     )
 

@@ -116,19 +116,12 @@ def _get_config_dir() -> Path:
 def _user_config_path() -> Path | None:
     """Return the user-override config path, or None if absent.
 
-    Preferred: ``${ARC_CONFIG_DIR:-~/.arc}/arcllm.toml``.
-    Deprecated fallback: the legacy ``config.toml`` from earlier ``arc init``
-    versions is honored if no ``arcllm.toml`` exists.
+    Path: ``${ARC_CONFIG_DIR:-~/.arc}/arcllm.toml``.
     """
     base = os.environ.get("ARC_CONFIG_DIR")
     root = Path(base).expanduser() if base else Path.home() / ".arc"
-    preferred = root / "arcllm.toml"
-    if preferred.exists():
-        return preferred
-    legacy = root / "config.toml"
-    if legacy.exists():
-        return legacy
-    return None
+    arcllm_toml = root / "arcllm.toml"
+    return arcllm_toml if arcllm_toml.exists() else None
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:

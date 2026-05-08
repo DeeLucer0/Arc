@@ -13,7 +13,6 @@ import pytest
 
 from arcgateway.bootstrap import (
     EmbeddedGateway,
-    _extract_agent_name,
     build_for_embedded,
 )
 from arcgateway.config import GatewayConfig
@@ -30,21 +29,6 @@ def empty_team_root(tmp_path: Path) -> Path:
 
 def _config(toml: str) -> GatewayConfig:
     return GatewayConfig.from_toml_str(toml)
-
-
-# ── DID parsing ───────────────────────────────────────────────────────────────
-
-
-def test_extract_agent_name_did_arc_agent_form() -> None:
-    assert _extract_agent_name("did:arc:agent:concierge") == "concierge"
-
-
-def test_extract_agent_name_did_arc_org_form() -> None:
-    assert _extract_agent_name("did:arc:org:agent/concierge") == "concierge"
-
-
-def test_extract_agent_name_default_did() -> None:
-    assert _extract_agent_name("did:arc:agent:default") == "default"
 
 
 # ── Build cases ───────────────────────────────────────────────────────────────

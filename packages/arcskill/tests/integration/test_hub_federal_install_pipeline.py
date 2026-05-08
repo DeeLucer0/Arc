@@ -134,7 +134,6 @@ def test_federal_valid_signed_skill_installs() -> None:
                 config,
                 install_base=install_base,
                 lock_path=lock_path,
-                skip_sandbox=False,
             )
 
         assert result.success is True, f"Expected success; got error: {result.error}"

@@ -55,18 +55,6 @@ class EmbeddedGateway(NamedTuple):
     mattermost_adapter: MattermostAdapter | None = None
 
 
-def _extract_agent_name(agent_did: str) -> str:
-    """Best-effort DID → bare agent name (last path segment).
-
-    Used as a fallback when the team_root does not yet contain an agent
-    whose ``[identity].did`` matches; well-formed configs identify the
-    agent by name in `[agent].name` and we resolve via that.
-    """
-    if "/" in agent_did:
-        return agent_did.rsplit("/", 1)[-1]
-    return agent_did.rsplit(":", 1)[-1]
-
-
 def _load_did_index(team_root: Path) -> dict[str, Path]:
     """Build a single ``did → agent_dir`` map from all team TOMLs.
 
@@ -109,22 +97,15 @@ def _resolve_agent_dir(
     """Find the team/<name>_agent/ directory matching ``agent_did``.
 
     Uses the prebuilt ``did_index`` when supplied (the factory reuses
-    one across turns); otherwise builds a one-shot index. Falls back
-    to the legacy name-suffix match (``did:arc:foo:bar/<name>`` →
-    ``<name>_agent``) when the DID is not in any TOML.
+    one across turns); otherwise builds a one-shot index. Returns
+    ``None`` when the DID is not in any TOML — well-formed configs
+    must declare ``[identity].did`` in arcagent.toml.
     """
     if not team_root.exists():
         return None
     if did_index is None:
         did_index = _load_did_index(team_root)
-    matched = did_index.get(agent_did)
-    if matched is not None:
-        return matched
-    fallback_name = _extract_agent_name(agent_did)
-    candidate = team_root / f"{fallback_name}_agent"
-    if candidate.is_dir() and (candidate / "arcagent.toml").exists():
-        return candidate
-    return None
+    return did_index.get(agent_did)
 
 
 def _make_agent_factory(team_root: Path) -> Any:

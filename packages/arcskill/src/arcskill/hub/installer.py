@@ -71,8 +71,6 @@ class InstallContext(BaseModel):
         Installation base directory.
     lock_path:
         Override path for the lock file (used in tests).
-    skip_sandbox:
-        If True and tier is not federal, skip the dry-run sandbox.
     quarantine_dir:
         Path to the quarantine directory for this install.
     fetch:
@@ -94,7 +92,6 @@ class InstallContext(BaseModel):
     config: HubConfig
     install_base: Path
     lock_path: Path | None
-    skip_sandbox: bool
     quarantine_dir: Path
     fetch: FetchResult | None = None
     verify: VerifyResult | None = None
@@ -165,7 +162,6 @@ def install(
     *,
     install_base: Path | None = None,
     lock_path: Path | None = None,
-    skip_sandbox: bool = False,
 ) -> InstallResult:
     """Run the full hub install pipeline for skill *name*.
 
@@ -182,8 +178,6 @@ def install(
         ``~/.arc/skills``.
     lock_path:
         Override the lock file path (used in tests).
-    skip_sandbox:
-        If True and tier is not federal, skip the dry-run sandbox.
 
     Returns
     -------
@@ -218,7 +212,6 @@ def install(
         config=config,
         install_base=base,
         lock_path=lock_path,
-        skip_sandbox=skip_sandbox,
         quarantine_dir=quarantine_dir,
     )
 
@@ -291,7 +284,6 @@ def update(
     *,
     install_base: Path | None = None,
     lock_path: Path | None = None,
-    skip_sandbox: bool = False,
 ) -> InstallResult:
     """Re-run the full pipeline to update an installed skill.
 
@@ -309,7 +301,6 @@ def update(
         config=config,
         install_base=install_base,
         lock_path=lock_path,
-        skip_sandbox=skip_sandbox,
     )
 
     if result.success and existing and result.fetch:
@@ -424,7 +415,6 @@ def _stage_dry_run(ctx: InstallContext) -> None:
     ctx.dry_run = run_dry_run(
         ctx.fetch.local_path,
         ctx.config,
-        skip_sandbox=ctx.skip_sandbox,
     )
     if not ctx.dry_run.passed:
         raise RuntimeError(
