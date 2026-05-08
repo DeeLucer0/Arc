@@ -84,7 +84,7 @@ async def _fake_stream(*tokens: str) -> AsyncIterator[StreamEvent]:
 
 
 @pytest.mark.asyncio
-@patch("arcagent.core.agent.load_eval_model")
+@patch("arcagent.core.model_manager.load_eval_model")
 async def test_chat_stream_returns_async_iterator(
     mock_load_model: MagicMock,
     agent_config: ArcAgentConfig,
@@ -96,7 +96,7 @@ async def test_chat_stream_returns_async_iterator(
         return _fake_stream("hello")
 
     agent = ArcAgent(config=agent_config)
-    with patch("arcagent.core.agent.arcrun_run_stream", side_effect=_fake_run_stream):
+    with patch("arcagent.core.agent_dispatch.arcrun_run_stream", side_effect=_fake_run_stream):
         await agent.startup()
         try:
             stream = await agent.chat_stream("say hello")
@@ -106,7 +106,7 @@ async def test_chat_stream_returns_async_iterator(
 
 
 @pytest.mark.asyncio
-@patch("arcagent.core.agent.load_eval_model")
+@patch("arcagent.core.model_manager.load_eval_model")
 async def test_chat_stream_yields_tokens_then_turn_end(
     mock_load_model: MagicMock,
     agent_config: ArcAgentConfig,
@@ -121,7 +121,7 @@ async def test_chat_stream_yields_tokens_then_turn_end(
     agent = ArcAgent(config=agent_config)
     events: list[Any] = []
 
-    with patch("arcagent.core.agent.arcrun_run_stream", side_effect=_fake_run_stream):
+    with patch("arcagent.core.agent_dispatch.arcrun_run_stream", side_effect=_fake_run_stream):
         await agent.startup()
         try:
             stream = await agent.chat_stream("task")
@@ -143,7 +143,7 @@ async def test_chat_stream_yields_tokens_then_turn_end(
 
 
 @pytest.mark.asyncio
-@patch("arcagent.core.agent.load_eval_model")
+@patch("arcagent.core.model_manager.load_eval_model")
 async def test_chat_stream_final_text_matches_response(
     mock_load_model: MagicMock,
     agent_config: ArcAgentConfig,
@@ -157,7 +157,7 @@ async def test_chat_stream_final_text_matches_response(
 
     agent = ArcAgent(config=agent_config)
 
-    with patch("arcagent.core.agent.arcrun_run_stream", side_effect=_fake_run_stream):
+    with patch("arcagent.core.agent_dispatch.arcrun_run_stream", side_effect=_fake_run_stream):
         await agent.startup()
         try:
             stream = await agent.chat_stream("question")
@@ -173,8 +173,8 @@ async def test_chat_stream_final_text_matches_response(
 
 
 @pytest.mark.asyncio
-@patch("arcagent.core.agent.load_eval_model")
-@patch("arcagent.core.agent.arcrun_run")
+@patch("arcagent.core.model_manager.load_eval_model")
+@patch("arcagent.core.agent_dispatch.arcrun_run")
 async def test_chat_stream_back_compat_run_unchanged(
     mock_arcrun_run: AsyncMock,
     mock_load_model: MagicMock,
@@ -197,7 +197,7 @@ async def test_chat_stream_back_compat_run_unchanged(
 
 
 @pytest.mark.asyncio
-@patch("arcagent.core.agent.load_eval_model")
+@patch("arcagent.core.model_manager.load_eval_model")
 async def test_chat_stream_bus_events_emitted(
     mock_load_model: MagicMock,
     agent_config: ArcAgentConfig,
@@ -211,7 +211,7 @@ async def test_chat_stream_bus_events_emitted(
 
     agent = ArcAgent(config=agent_config)
 
-    with patch("arcagent.core.agent.arcrun_run_stream", side_effect=_fake_run_stream):
+    with patch("arcagent.core.agent_dispatch.arcrun_run_stream", side_effect=_fake_run_stream):
         await agent.startup()
         try:
             assert agent._bus is not None

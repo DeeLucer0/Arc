@@ -140,8 +140,8 @@ class TestRun:
         with pytest.raises(RuntimeError, match="not started"):
             await agent.run("test task")
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run")
     async def test_run_calls_loop(
         self,
         mock_arcrun_run: AsyncMock,
@@ -324,8 +324,8 @@ class TestArcLLMBridge:
 
 
 class TestPreRespondEvent:
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run")
     async def test_pre_respond_emitted_before_run(
         self,
         mock_arcrun_run: AsyncMock,
@@ -347,8 +347,8 @@ class TestPreRespondEvent:
 
 
 class TestErrorEvent:
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run")
     async def test_error_event_emitted_on_failure(
         self,
         mock_arcrun_run: AsyncMock,
@@ -404,8 +404,8 @@ class TestVaultValidation:
 
 
 class TestModelCaching:
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run")
     async def test_model_loaded_once_across_runs(
         self,
         mock_arcrun_run: AsyncMock,
@@ -448,8 +448,8 @@ class TestErrorHandling:
 class TestChat:
     """Tests for multi-turn chat() method with SessionManager integration."""
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run")
     async def test_chat_creates_session(
         self,
         mock_arcrun_run: AsyncMock,
@@ -467,8 +467,8 @@ class TestChat:
         assert agent._session is not None
         assert agent._session.session_id != ""
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run")
     async def test_chat_appends_user_message(
         self,
         mock_arcrun_run: AsyncMock,
@@ -488,8 +488,8 @@ class TestChat:
         assert len(user_msgs) >= 1
         assert any(m.get("content") == "Hi there" for m in user_msgs)
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run")
     async def test_chat_passes_messages_to_run_loop(
         self,
         mock_arcrun_run: AsyncMock,
@@ -507,8 +507,8 @@ class TestChat:
         call_kwargs = mock_arcrun_run.call_args
         assert "messages" in call_kwargs.kwargs
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run")
     async def test_chat_resumes_session(
         self,
         mock_arcrun_run: AsyncMock,
@@ -529,8 +529,8 @@ class TestChat:
         await agent.chat("Second", session_id=session_id)
         assert agent._session.session_id == session_id
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run")
     async def test_chat_persists_to_jsonl(
         self,
         mock_arcrun_run: AsyncMock,
@@ -557,8 +557,8 @@ class TestChat:
         with pytest.raises(RuntimeError, match="not started"):
             await agent.chat("Hello")
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run")
     async def test_chat_appends_assistant_response(
         self,
         mock_arcrun_run: AsyncMock,
@@ -614,8 +614,8 @@ class TestBridgeNoRunningLoop:
 class TestMaybeCompactEdgeCases:
     """Lines 343, 346-347: _maybe_compact edge cases."""
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run")
     async def test_maybe_compact_returns_when_context_none(
         self,
         mock_arcrun_run: AsyncMock,
@@ -634,16 +634,18 @@ class TestMaybeCompactEdgeCases:
         # Save the original context and temporarily set to None during _maybe_compact
         original_context = agent._context
 
-        # We can test this by directly calling _maybe_compact with context=None
+        # We can test this by directly calling maybe_compact with context=None
+        from arcagent.core.agent_dispatch import maybe_compact
+
         agent._context = None
-        await agent._maybe_compact(session_manager)
+        await maybe_compact(agent, session_manager)
         # Should not crash
 
         # Restore for cleanup
         agent._context = original_context
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run")
     async def test_maybe_compact_triggers_when_threshold_exceeded(
         self,
         mock_arcrun_run: AsyncMock,
@@ -713,16 +715,20 @@ class TestCapabilityPromptInjectionEdgeCases:
     async def test_capability_prompt_injection_returns_when_bus_none(
         self, agent: ArcAgent
     ) -> None:
+        from arcagent.core.agent_lifecycle import setup_capability_prompt_injection
+
         await agent.startup()
         agent._bus = None
-        agent._setup_capability_prompt_injection()  # no-op
+        setup_capability_prompt_injection(agent)  # no-op
 
     async def test_capability_prompt_injection_returns_when_registry_none(
         self, agent: ArcAgent
     ) -> None:
+        from arcagent.core.agent_lifecycle import setup_capability_prompt_injection
+
         await agent.startup()
         agent._capability_registry = None
-        agent._setup_capability_prompt_injection()  # no-op
+        setup_capability_prompt_injection(agent)  # no-op
 
 
 class TestVaultResolverEdgeCases:
@@ -730,9 +736,11 @@ class TestVaultResolverEdgeCases:
 
     def test_create_vault_resolver_returns_none_when_backend_empty(self, agent: ArcAgent) -> None:
         """Lines 475: return None when backend_ref is empty."""
+        from arcagent.core.vault_resolver import create_vault_resolver
+
         # Config has no vault backend
         assert agent._config.vault.backend == ""
-        resolver = agent._create_vault_resolver()
+        resolver = create_vault_resolver(agent._config)
         assert resolver is None
 
     async def test_vault_resolver_import_failure_raises(self, tmp_path: Path) -> None:
@@ -756,8 +764,8 @@ class TestVaultResolverEdgeCases:
 class TestAgentHandle:
     """Tests for AgentHandle steering wrapper."""
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_run_async_returns_agent_handle(
         self,
         mock_run_async: AsyncMock,
@@ -775,8 +783,8 @@ class TestAgentHandle:
         handle = await agent.run_async("test task")
         assert isinstance(handle, AgentHandle)
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_steer_delegates_to_run_handle(
         self,
         mock_run_async: AsyncMock,
@@ -793,8 +801,8 @@ class TestAgentHandle:
         await handle.steer("new direction")
         mock_handle.steer.assert_called_once_with("new direction")
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_follow_up_delegates(
         self,
         mock_run_async: AsyncMock,
@@ -811,8 +819,8 @@ class TestAgentHandle:
         await handle.follow_up("also do X")
         mock_handle.follow_up.assert_called_once_with("also do X")
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_cancel_delegates(
         self,
         mock_run_async: AsyncMock,
@@ -829,8 +837,8 @@ class TestAgentHandle:
         await handle.cancel()
         mock_handle.cancel.assert_called_once()
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_result_emits_post_respond(
         self,
         mock_run_async: AsyncMock,
@@ -857,8 +865,8 @@ class TestAgentHandle:
         assert len(events) == 1
         assert events[0]["session_id"] is not None
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_state_property_exposes_run_state(
         self,
         mock_run_async: AsyncMock,
@@ -886,8 +894,8 @@ class TestAgentHandle:
         with pytest.raises(RuntimeError, match="not started"):
             await agent.chat_async("message")
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_chat_async_returns_agent_handle(
         self,
         mock_run_async: AsyncMock,
@@ -904,8 +912,8 @@ class TestAgentHandle:
         handle = await agent.chat_async("hello")
         assert isinstance(handle, AgentHandle)
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_ready_event_includes_async_fns(
         self,
         mock_run_async: AsyncMock,
@@ -918,8 +926,8 @@ class TestAgentHandle:
         assert callable(agent.run_async)
         assert callable(agent.chat_async)
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_result_with_messages_uses_model_dump(
         self,
         mock_run_async: AsyncMock,
@@ -948,8 +956,8 @@ class TestAgentHandle:
         msgs = events[0]["messages"]
         assert any(m.get("role") == "user" for m in msgs)
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_result_raises_on_double_call(
         self,
         mock_run_async: AsyncMock,
@@ -968,8 +976,8 @@ class TestAgentHandle:
         with pytest.raises(RuntimeError, match="already been awaited"):
             await handle.result()
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_execute_loop_async_emits_error_on_failure(
         self,
         mock_run_async: AsyncMock,
@@ -998,8 +1006,8 @@ class TestAgentHandle:
 class TestSteeringValidation:
     """SEC-001/SEC-010: Input validation on steer/follow_up messages."""
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_steer_rejects_empty_string(
         self,
         mock_run_async: AsyncMock,
@@ -1016,8 +1024,8 @@ class TestSteeringValidation:
         with pytest.raises(ValueError, match="must not be empty"):
             await handle.steer("")
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_steer_rejects_whitespace_only(
         self,
         mock_run_async: AsyncMock,
@@ -1034,8 +1042,8 @@ class TestSteeringValidation:
         with pytest.raises(ValueError, match="must not be empty"):
             await handle.steer("   \n  ")
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_steer_rejects_oversized_message(
         self,
         mock_run_async: AsyncMock,
@@ -1053,8 +1061,8 @@ class TestSteeringValidation:
         with pytest.raises(ValueError, match="exceeds"):
             await handle.steer(oversized)
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_follow_up_rejects_empty_string(
         self,
         mock_run_async: AsyncMock,
@@ -1071,8 +1079,8 @@ class TestSteeringValidation:
         with pytest.raises(ValueError, match="must not be empty"):
             await handle.follow_up("")
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_follow_up_rejects_oversized_message(
         self,
         mock_run_async: AsyncMock,
@@ -1094,8 +1102,8 @@ class TestSteeringValidation:
 class TestSteeringTerminalGuard:
     """QA: Prevent steer/follow_up/cancel after result() has been awaited."""
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_steer_after_result_raises(
         self,
         mock_run_async: AsyncMock,
@@ -1114,8 +1122,8 @@ class TestSteeringTerminalGuard:
         with pytest.raises(RuntimeError, match="Cannot call steer"):
             await handle.steer("too late")
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_follow_up_after_result_raises(
         self,
         mock_run_async: AsyncMock,
@@ -1134,8 +1142,8 @@ class TestSteeringTerminalGuard:
         with pytest.raises(RuntimeError, match="Cannot call follow_up"):
             await handle.follow_up("too late")
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_cancel_after_result_raises(
         self,
         mock_run_async: AsyncMock,
@@ -1158,8 +1166,8 @@ class TestSteeringTerminalGuard:
 class TestSteeringAuditTrail:
     """SEC-003: Audit events emitted for steering operations."""
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_steer_emits_audit_event(
         self,
         mock_run_async: AsyncMock,
@@ -1181,8 +1189,8 @@ class TestSteeringAuditTrail:
             {"session_id": handle._session_id, "message_len": 8},
         )
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_follow_up_emits_audit_event(
         self,
         mock_run_async: AsyncMock,
@@ -1203,8 +1211,8 @@ class TestSteeringAuditTrail:
             {"session_id": handle._session_id, "message_len": 6},
         )
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_cancel_emits_audit_event(
         self,
         mock_run_async: AsyncMock,
@@ -1229,8 +1237,8 @@ class TestSteeringAuditTrail:
 class TestChatAsyncSession:
     """SEC-005/COV: chat_async session integration."""
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_result_commits_assistant_message_to_session(
         self,
         mock_run_async: AsyncMock,
@@ -1253,8 +1261,8 @@ class TestChatAsyncSession:
         assert len(assistant_msgs) >= 1
         assert any(m.get("content") == "AI response" for m in assistant_msgs)
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run_async")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run_async")
     async def test_chat_async_resume_session(
         self,
         mock_run_async: AsyncMock,
@@ -1288,7 +1296,7 @@ class TestLLMBridgeWiring:
     ModuleBus and therefore never reached the UI or memory modules.
     """
 
-    @patch("arcagent.core.agent.load_eval_model")
+    @patch("arcagent.core.model_manager.load_eval_model")
     async def test_ensure_model_passes_on_event_to_load_eval_model(
         self,
         mock_load_model: MagicMock,
@@ -1306,7 +1314,7 @@ class TestLLMBridgeWiring:
         assert "on_event" in kwargs, "on_event must be passed to load_eval_model"
         assert callable(kwargs["on_event"]), "on_event must be a callable"
 
-    @patch("arcagent.core.agent.load_eval_model")
+    @patch("arcagent.core.model_manager.load_eval_model")
     async def test_llm_events_reach_module_bus(
         self,
         mock_load_model: MagicMock,
@@ -1345,7 +1353,7 @@ class TestLLMBridgeWiring:
 class TestShutdownClosesModel:
     """SPEC-017 R-004: shutdown must close the httpx client on the model."""
 
-    @patch("arcagent.core.agent.load_eval_model")
+    @patch("arcagent.core.model_manager.load_eval_model")
     async def test_shutdown_closes_model(
         self,
         mock_load_model: MagicMock,

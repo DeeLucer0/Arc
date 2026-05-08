@@ -129,8 +129,8 @@ class TestFullStartupShutdown:
 class TestRunWithMockLLM:
     """T4.2.2: agent.run() with mock LLM and native tools."""
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run")
     async def test_run_full_pipeline(
         self,
         mock_arcrun_run: AsyncMock,
@@ -470,8 +470,8 @@ class TestGracefulShutdown:
 class TestPostRespondEvent:
     """Integration: agent.run() emits agent:post_respond with result."""
 
-    @patch("arcagent.core.agent.load_eval_model")
-    @patch("arcagent.core.agent.arcrun_run")
+    @patch("arcagent.core.model_manager.load_eval_model")
+    @patch("arcagent.core.agent_dispatch.arcrun_run")
     async def test_post_respond_emitted(
         self,
         mock_arcrun_run: AsyncMock,
