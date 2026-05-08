@@ -11,7 +11,7 @@
 - **As of:** 2026-05-07
 - **Total notebooks:** 16 to rewrite + 24 to create = **40 notebooks**
 - **Strategy:** 3 parallel agents per chunk. ~14 chunks total.
-- **Phase:** Setup complete (move + path fixes shipped). Backlog defined. Execution not yet started.
+- **Phase:** Pre-flight (§9) complete. C01 (arctrust 01–03) verified `done`. Ready to dispatch C02.
 
 ---
 
@@ -587,9 +587,9 @@ Each chunk is 3 notebooks dispatched in parallel. **Chunks must run in order** b
 | 5.2.9 | arctrust/01-identity-did | CREATE | C01 | done | 57 cells, 41KB, 9 sections |
 | 5.2.10 | arctrust/02-keypairs-signing | CREATE | C01 | done | 56 cells, 38KB, 9 sections |
 | 5.2.11 | arctrust/03-policy-pipeline | CREATE | C01 | done | 51 cells, 47KB, 10 sections |
-| 5.2.12 | arctrust/04-audit-sinks | CREATE | C02 | pending | |
-| 5.1.10 | arcllm/10-audit-trail | REWRITE | C02 | pending | High-risk — arctrust migration |
-| 5.2.1 | arcllm/14-trace-store | CREATE | C02 | pending | |
+| 5.2.12 | arctrust/04-audit-sinks | CREATE | C02 | done | 55 cells, 38KB, 10 sections |
+| 5.1.10 | arcllm/10-audit-trail | REWRITE | C02 | done | 46 cells, 37KB, 10 sections |
+| 5.2.1 | arcllm/14-trace-store | CREATE | C02 | done | 54 cells, 51KB, 10 sections |
 | 5.2.13 | arcagent/01-first-agent | CREATE | C03 | pending | |
 | 5.2.14 | arcagent/02-tool-integration | CREATE | C03 | pending | |
 | 5.2.15 | arcagent/03-policy-and-modules | CREATE | C03 | pending | |
