@@ -203,9 +203,10 @@ class FileBackend:
         last_line = f.readline().decode("utf-8").strip()
         if last_line:
             try:
-                return json.loads(last_line).get("seq", 0)
+                seq = json.loads(last_line).get("seq", 0)
             except json.JSONDecodeError:
                 return 0
+            return seq if isinstance(seq, int) else 0
         return 0
 
     def _sync_read_stream(

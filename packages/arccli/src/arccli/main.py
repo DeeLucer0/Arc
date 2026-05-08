@@ -10,6 +10,10 @@ SDD §3.11 — Centralized slash-command registry.
 from __future__ import annotations
 
 import sys
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from prompt_toolkit.completion import Completer
 
 
 def _out(msg: str = "") -> None:
@@ -62,7 +66,7 @@ def _dispatch_oneshot(argv: list[str]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _build_completer():  # type: ignore[return]
+def _build_completer() -> Completer | None:
     """Build a prompt_toolkit WordCompleter from the command registry."""
     try:
         from prompt_toolkit.completion import WordCompleter
@@ -70,7 +74,6 @@ def _build_completer():  # type: ignore[return]
         from arccli.commands.render import autocomplete_dict
 
         words = autocomplete_dict()
-        # Provide both /name and name for completion
         all_words = list(words.keys()) + [f"/{k}" for k in words.keys()]
         return WordCompleter(all_words, ignore_case=True, sentence=True)
     except ImportError:

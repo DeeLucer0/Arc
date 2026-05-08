@@ -1,5 +1,5 @@
 """Allow running as `python -m arccli`."""
 
-from arccli.main import cli
+from arccli.main import main
 
-cli()
+main()

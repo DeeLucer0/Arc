@@ -14,6 +14,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytest.importorskip("boto3")
+pytest.importorskip("botocore")
+
 from arcllm.exceptions import ArcLLMConfigError
 from arcllm.vault import VaultBackend
 
