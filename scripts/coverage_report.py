@@ -46,7 +46,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-
 # ---------------------------------------------------------------------------
 # Threshold configuration
 # ---------------------------------------------------------------------------
@@ -104,7 +103,8 @@ def _run_coverage(
         "--cov-report=term-missing",
         "--tb=no",
         "-q",
-    ] + cov_args
+        *cov_args,
+    ]
 
     if html:
         cmd += ["--cov-report=html:htmlcov"]
@@ -112,7 +112,7 @@ def _run_coverage(
     print(f"\nRunning: {' '.join(cmd)}\n")
 
     try:
-        result = subprocess.run(
+        subprocess.run(  # noqa: S603 — cmd is built from hard-coded args + config
             cmd,
             cwd=root,
             capture_output=False,  # let pytest output go to stdout

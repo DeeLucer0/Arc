@@ -22,6 +22,9 @@ dev = [
     "types-pyyaml>=6.0.12.20260408",
     "types-croniter>=6.2.2.20260408",
     "freezegun>=1.5.5",
+    "nbformat>=5.10.4",
+    "jupyter>=1.1.1",
+    "ipykernel>=7.2.0",
 ]
 test = [
     "pytest>=8.0",
@@ -54,7 +57,8 @@ select = ["E", "W", "F", "I", "N", "UP", "B", "A", "S", "T20", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**/*.py" = ["S101", "S105", "S106", "E402", "S603"]
-"**/walkthrough/**/*.ipynb" = ["S101", "B007", "S307", "S110", "T20", "F401", "E501", "F821", "E741"]
+"scripts/**/*.py" = ["T201"]
+"walkthroughs/**/*.ipynb" = ["S101", "B007", "S307", "S110", "T20", "F401", "F811", "E501", "F821", "E741", "E402", "I001"]
 
 [tool.mypy]
 python_version = "3.11"
