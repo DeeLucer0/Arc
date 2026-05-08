@@ -95,7 +95,9 @@ class TestOTelContextPropagation:
         state.event_bus.emit("parent.event", {"data": "value"})
         parent_tip = state.event_bus.events[-1].event_hash
 
-        identity = derive_child_identity(b"\x42" * 32, "otel-spawn-1", 30)
+        identity = derive_child_identity(
+            parent_sk_bytes=b"\x42" * 32, spawn_id="otel-spawn-1", wallclock_timeout_s=30
+        )
         await spawn(
             parent_state=state,
             task="do task",
@@ -118,7 +120,9 @@ class TestOTelContextPropagation:
         """spawn.start event must carry parent_depth for OTel attribute tracing."""
         model = MockModel([LLMResponse(content="done", stop_reason="end_turn")])
         state = _make_parent_state(depth=1, model=model)
-        identity = derive_child_identity(b"\x42" * 32, "otel-spawn-2", 30)
+        identity = derive_child_identity(
+            parent_sk_bytes=b"\x42" * 32, spawn_id="otel-spawn-2", wallclock_timeout_s=30
+        )
 
         await spawn(
             parent_state=state,
@@ -141,7 +145,9 @@ class TestOTelContextPropagation:
         """spawn.complete event carries the child DID for audit trail."""
         model = MockModel([LLMResponse(content="done", stop_reason="end_turn")])
         state = _make_parent_state(model=model)
-        identity = derive_child_identity(b"\x42" * 32, "otel-spawn-3", 30)
+        identity = derive_child_identity(
+            parent_sk_bytes=b"\x42" * 32, spawn_id="otel-spawn-3", wallclock_timeout_s=30
+        )
 
         await spawn(
             parent_state=state,
