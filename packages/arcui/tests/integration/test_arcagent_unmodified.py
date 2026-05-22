@@ -20,6 +20,17 @@ that one argument to ``self._workspace.parent`` so traces live at
 ``<agent_root>/traces/`` where ``arcllm.JSONLTraceStore`` documents
 they belong. Documented in SDD §13.5.
 
+The ARC_FIXES_PRD ("AccessGuard demo migration") added the
+``signals_completion`` pass-through exception: the canonical Stage-2
+pattern is ``agent.run(task)`` with a terminator tool, but
+``ToolRegistry.to_arcrun_tools()`` stripped the flag because
+``RegisteredTool`` had no field to hold it. Two files change
+(``tool_transport.py``, ``tool_registry.py``) to preserve the flag end
+to end. Without this, every structured-output demo has to bypass
+``agent.run`` and call ``arcrun.run`` directly with private-attribute
+access — the bug responsible for ~80% of AccessGuard's workaround
+surface area.
+
 This test now enforces "no changes to arcagent except the explicitly
 allowed files" so a future PR can't quietly regress the core LOC budget.
 
@@ -62,6 +73,14 @@ _ALLOWED_ARCAGENT_PATHS = (
     "packages/arcagent/src/arcagent/modules/ui_reporter/_runtime.py",
     # SPEC-023 NIST AU-9 trace path fix (one-line change in _ensure_model).
     "packages/arcagent/src/arcagent/core/agent.py",
+    # ARC_FIXES_PRD #2 — signals_completion pass-through. RegisteredTool
+    # gains a field and to_arcrun_tools() forwards it.
+    "packages/arcagent/src/arcagent/core/tool_transport.py",
+    "packages/arcagent/src/arcagent/core/tool_registry.py",
+    # Tests for the ARC_FIXES_PRD #2 behavior.
+    "packages/arcagent/tests/unit/core/test_tool_transport.py",
+    "packages/arcagent/tests/unit/core/test_tool_registry.py",
+    "packages/arcagent/tests/unit/core/test_native_tool.py",
 )
 
 

@@ -173,6 +173,7 @@
             <span class="pill-nav-item active" data-tab="overview">Overview</span>
             <span class="pill-nav-item" data-tab="traces">Traces</span>
             <span class="pill-nav-item" data-tab="cost">Cost</span>
+            <span class="pill-nav-item" data-tab="team-chat">Team Chat</span>
           </div>
         </div>
       </div>
@@ -515,6 +516,33 @@
           </div>
           <div class="card-body" id="budget-gauges">
             <div class="empty-state"><p>No budgets configured</p></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ==================== TEAM CHAT TAB ==================== -->
+      <div class="tab-panel" id="tab-team-chat">
+        <div class="grid-2 mb-20" style="grid-template-columns: 280px 1fr;">
+          <!-- Channel list -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title">Channels</span>
+              <button class="btn btn-secondary btn-sm" id="team-chat-refresh">Refresh</button>
+            </div>
+            <div class="card-body" id="team-chat-channels">
+              <div class="empty-state"><p>No channels yet</p></div>
+            </div>
+          </div>
+
+          <!-- Chronological message stream for the selected channel -->
+          <div class="card">
+            <div class="card-header">
+              <span class="card-title" id="team-chat-channel-title">Select a channel</span>
+              <span class="text-xs text-dimmed" id="team-chat-channel-meta"></span>
+            </div>
+            <div class="card-body" id="team-chat-messages" style="max-height: 70vh; overflow-y: auto;">
+              <div class="empty-state"><p>Pick a channel on the left to see the message history.</p></div>
+            </div>
           </div>
         </div>
       </div>
@@ -884,7 +912,127 @@
       item.classList.add('active');
       document.querySelectorAll('.tab-panel').forEach(el => el.classList.remove('active'));
       document.getElementById('tab-' + tab)?.classList.add('active');
+      if (tab === 'team-chat') {
+        try { window.ArcTeamChat && window.ArcTeamChat.activate(); } catch (e) { /* noop */ }
+      }
     });
+
+    /* --- Team Chat tab — read-only viewer for arcteam channels.
+       Polls the two new REST endpoints; no WebSocket subscription yet
+       (Phase C in the Arc fixes PRD). Auto-refresh interval is modest
+       to keep the dashboard responsive during multi-stage workflows. */
+    (function () {
+      const POLL_MS = 4000;
+      const VIEWER_HEADER = () => {
+        const tok = window.localStorage.getItem('arcui_viewer_token') || '';
+        return tok ? { 'Authorization': 'Bearer ' + tok } : {};
+      };
+
+      let currentChannel = null;
+      let pollHandle = null;
+      let active = false;
+
+      function escapeHtml(s) {
+        return String(s == null ? '' : s)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      }
+
+      async function fetchJson(url) {
+        const resp = await fetch(url, { headers: VIEWER_HEADER() });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return resp.json();
+      }
+
+      async function loadChannels() {
+        const root = document.getElementById('team-chat-channels');
+        if (!root) return;
+        try {
+          const data = await fetchJson('/api/team/channels');
+          const channels = (data && data.channels) || [];
+          if (channels.length === 0) {
+            root.innerHTML = '<div class="empty-state"><p>No channels yet</p></div>';
+            return;
+          }
+          root.innerHTML = channels.map(c => {
+            const cls = (c.name === currentChannel) ? ' active' : '';
+            const memberCount = Array.isArray(c.members) ? c.members.length : 0;
+            return `<div class="pill-nav-item${cls}" data-channel="${escapeHtml(c.name)}" style="display:block;margin:4px 0;cursor:pointer;">
+              <div>${escapeHtml(c.name)}</div>
+              <div class="text-xs text-dimmed">${memberCount} member(s)</div>
+            </div>`;
+          }).join('');
+          root.querySelectorAll('[data-channel]').forEach(el => {
+            el.addEventListener('click', () => selectChannel(el.dataset.channel));
+          });
+        } catch (e) {
+          root.innerHTML = '<div class="empty-state"><p>Failed to load channels.</p></div>';
+        }
+      }
+
+      async function loadMessages(channelName) {
+        const stream = document.getElementById('team-chat-messages');
+        const title = document.getElementById('team-chat-channel-title');
+        const meta = document.getElementById('team-chat-channel-meta');
+        if (!stream) return;
+        if (title) title.textContent = '#' + channelName;
+        try {
+          const data = await fetchJson(
+            '/api/team/channels/' + encodeURIComponent(channelName) + '/messages?limit=200'
+          );
+          const msgs = (data && data.messages) || [];
+          if (meta) meta.textContent = msgs.length + ' message(s)';
+          if (msgs.length === 0) {
+            stream.innerHTML = '<div class="empty-state"><p>No messages yet.</p></div>';
+            return;
+          }
+          stream.innerHTML = msgs.map(m => {
+            const toList = Array.isArray(m.to) ? m.to.join(', ') : '';
+            return `<div style="border-left:2px solid #2a2f3a;padding:8px 12px;margin-bottom:10px;">
+              <div class="text-xs text-dimmed">${escapeHtml(m.sender)} &rarr; ${escapeHtml(toList)} &middot; ${escapeHtml(m.ts || '')}</div>
+              <div style="white-space:pre-wrap;margin-top:4px;">${escapeHtml(m.body)}</div>
+            </div>`;
+          }).join('');
+          // Auto-scroll to newest message — the channel reads top-to-bottom.
+          stream.scrollTop = stream.scrollHeight;
+        } catch (e) {
+          stream.innerHTML = '<div class="empty-state"><p>Failed to load messages.</p></div>';
+        }
+      }
+
+      function selectChannel(name) {
+        currentChannel = name;
+        loadChannels();
+        loadMessages(name);
+      }
+
+      function refresh() {
+        if (!active) return;
+        loadChannels();
+        if (currentChannel) loadMessages(currentChannel);
+      }
+
+      function startPolling() {
+        stopPolling();
+        pollHandle = setInterval(refresh, POLL_MS);
+      }
+
+      function stopPolling() {
+        if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
+      }
+
+      function activate() {
+        active = true;
+        refresh();
+        startPolling();
+      }
+
+      window.addEventListener('beforeunload', stopPolling);
+      const refreshBtn = document.getElementById('team-chat-refresh');
+      if (refreshBtn) refreshBtn.addEventListener('click', refresh);
+
+      window.ArcTeamChat = { activate };
+    })();
 
     /* --- Connection --- */
     const connUI = new ConnectionUI(document.getElementById('connection-banner'));

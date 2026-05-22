@@ -63,6 +63,14 @@ class RegisteredTool:
     # SDD §5.2). Examples: "file_read", "file_write", "network_egress",
     # "subprocess", "state_mutation". Empty = no declared capabilities.
     capability_tags: list[str] = field(default_factory=list)
+    # SPEC-017 R-030 — when True, an invocation of this tool ends the
+    # ReAct turn and its (validated) arguments become the loop's
+    # completion payload. Preserved through ``ToolRegistry.to_arcrun_tools``
+    # so ``agent.run()`` remains the documented entry point for
+    # structured-output agents (the alternative — bypassing ``agent.run``
+    # and calling ``arcrun.run`` directly — forces callers to reach into
+    # arcagent internals).
+    signals_completion: bool = False
 
 
 # -- Type map for native_tool decorator schema generation --
@@ -85,6 +93,7 @@ def native_tool(
     when_to_use: str = "",
     example: str = "",
     category: str = "",
+    signals_completion: bool = False,
 ) -> Callable[..., Any]:
     """Decorator that converts an async function into a RegisteredTool.
 
@@ -158,6 +167,7 @@ def native_tool(
             when_to_use=when_to_use,
             example=example,
             category=category,
+            signals_completion=signals_completion,
         )
         fn.tool = tool  # type: ignore[attr-defined]  # reason: decorator attaches RegisteredTool to wrapped Callable; mypy can't model dynamic attrs
         return fn

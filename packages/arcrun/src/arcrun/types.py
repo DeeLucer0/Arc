@@ -68,7 +68,17 @@ class SandboxConfig:
 
 @dataclass
 class LoopResult:
-    """Returned by run()."""
+    """Returned by run().
+
+    ``completion_payload`` and ``completion_tool`` surface the structured
+    terminator output (SPEC-017 R-030). When a tool flagged
+    ``signals_completion=True`` ends the loop, its (validated) arguments
+    are exposed here so callers reading structured stage outputs don't
+    have to capture them via a closure on the tool's ``execute`` callable
+    or fish through ``events`` for the ``loop.completed`` event payload.
+    Both are ``None`` when the loop terminated by ``stop_reason==end_turn``
+    or hit ``max_turns``/``max_cost``.
+    """
 
     content: str | None
     turns: int
@@ -77,6 +87,8 @@ class LoopResult:
     strategy_used: str
     cost_usd: float
     events: list[Event] = field(default_factory=list)
+    completion_payload: dict[str, Any] | None = None
+    completion_tool: str | None = None
 
     def verify_integrity(self) -> ChainVerificationResult:
         """Verify tamper-evidence of the event chain."""

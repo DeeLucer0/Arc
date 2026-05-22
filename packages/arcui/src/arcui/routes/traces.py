@@ -12,8 +12,12 @@ from arcui.schemas import ErrorResponse, TracesResponse
 
 _MAX_TRACE_LIMIT = 500
 
-# NIST SI-10: Input validation — trace IDs are hex UUIDs (32 hex chars)
-_VALID_TRACE_ID_RE = re.compile(r"^[a-f0-9]{32}$")
+# NIST SI-10: Input validation — same safe charset as _VALID_FILTER_RE.
+# Trace IDs flow from many producers (chat_handler emits ``chat-NNN``,
+# demo orchestrators emit ``run-abc:role``, ui_reporter aggregator emits
+# ``trace-NNN-N``, arcllm emits hex UUIDs). All must round-trip through
+# the detail route without being rejected.
+_VALID_TRACE_ID_RE = re.compile(r"^[a-zA-Z0-9._:/-]{1,128}$")
 # Cursor format: YYYY-MM-DD:line_number
 _VALID_CURSOR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}:\d+$")
 # Filter params: alphanumeric + dash/underscore/dot/colon (safe chars only)

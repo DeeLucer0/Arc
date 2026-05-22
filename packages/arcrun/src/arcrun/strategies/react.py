@@ -60,17 +60,21 @@ async def _execute_tool_calls(
     tool_calls: list[Any],
     state: RunState,
     sandbox: Sandbox,
-) -> list[Any]:
+) -> tuple[list[Any], set[str]]:
     """Execute tool calls. Tools flagged ``parallel_safe`` run concurrently.
 
     The loop has no knowledge of specific tool names. Concurrency is a
     declared property of the tool — any tool that opts in via
     ``Tool.parallel_safe`` is queued and dispatched in one
     ``asyncio.gather``. All other calls run sequentially in submission
-    order. Returns tool result messages in original call order.
+    order. Returns ``(result_messages_in_order, succeeded_tool_call_ids)``;
+    the set is consumed by completion-payload extraction so a tool whose
+    args failed schema validation does NOT terminate the loop with
+    unvalidated args (SPEC-017 R-030 — strict completion).
     """
     tool_results_map: dict[int, Any] = {}
     parallel_queue: dict[int, Any] = {}
+    succeeded_ids: set[str] = set()
     steered = False
 
     for idx, tc in enumerate(tool_calls):
@@ -82,8 +86,10 @@ async def _execute_tool_calls(
         if tool is not None and tool.parallel_safe:
             parallel_queue[idx] = tc
         else:
-            result_msg, _ok = await execute_tool_call(tc, state, sandbox)
+            result_msg, ok = await execute_tool_call(tc, state, sandbox)
             tool_results_map[idx] = result_msg
+            if ok:
+                succeeded_ids.add(tc.id)
 
             if not state.steer_queue.empty():
                 steer_msg = state.steer_queue.get_nowait()
@@ -99,6 +105,8 @@ async def _execute_tool_calls(
         for idx, result in zip(indices, results, strict=False):
             if isinstance(result, tuple):
                 tool_results_map[idx] = result[0]
+                if result[1]:
+                    succeeded_ids.add(parallel_queue[idx].id)
             else:
                 tc = parallel_queue[idx]
                 tool_results_map[idx] = tool_result(tc.id, f"Error: {result}")
@@ -111,7 +119,8 @@ async def _execute_tool_calls(
             tool_results_map[idx] = tool_result(tc.id, "operation cancelled: steered")
 
     # Return results in original order
-    return [tool_results_map[idx] for idx in sorted(tool_results_map.keys())]
+    ordered = [tool_results_map[idx] for idx in sorted(tool_results_map.keys())]
+    return ordered, succeeded_ids
 
 
 async def react_loop(
@@ -204,19 +213,30 @@ async def react_loop(
             return _build_result(state, response.content)
 
         # Process tool calls (parallel_safe tools dispatched concurrently)
-        result_messages = await _execute_tool_calls(response.tool_calls, state, sandbox)
+        result_messages, succeeded_ids = await _execute_tool_calls(
+            response.tool_calls, state, sandbox
+        )
         state.messages.extend(result_messages)
 
         # SPEC-017 R-030/R-031 — any tool flagged ``signals_completion``
-        # terminates the loop with its arguments as the completion
-        # payload. Generic mechanism — the loop has no knowledge of
+        # whose ``execute`` actually fired successfully (args passed
+        # schema validation) terminates the loop with those validated
+        # arguments. If the only completion-tool call failed validation,
+        # the loop continues so the model can retry with corrected args
+        # — the alternative (end the loop with unvalidated args) leaves
+        # callers with a payload that doesn't match their declared
+        # schema. Generic mechanism — the loop has no knowledge of
         # specific terminator tool names.
-        completion = _extract_completion_payload(response.tool_calls, state.registry)
+        completion = _extract_completion_payload(
+            response.tool_calls, state.registry, succeeded_ids
+        )
         if completion is not None:
-            state.completion_payload = completion
-            bus.emit("loop.completed", dict(completion))
+            payload, tool_name = completion
+            state.completion_payload = payload
+            state.completion_tool = tool_name
+            bus.emit("loop.completed", dict(payload))
             _end_turn(state, bus)
-            return _build_result(state, completion.get("summary"))
+            return _build_result(state, payload.get("summary"))
 
         _end_turn(state, bus)
 
@@ -244,21 +264,28 @@ async def react_loop(
 def _extract_completion_payload(
     tool_calls: list[Any],
     registry: Any,
-) -> dict[str, Any] | None:
-    """Return the arguments of the first ``signals_completion`` tool call.
+    succeeded_ids: set[str],
+) -> tuple[dict[str, Any], str] | None:
+    """Return ``(args, tool_name)`` for the first successful completion call.
 
-    Scans the assistant's proposed tool calls for a tool that has
-    declared itself a structured terminator via
-    ``Tool.signals_completion=True`` and returns its argument dict.
+    "Successful" means the executor accepted the call's arguments (the
+    JSON-schema validation in ``executor.execute_tool_call`` passed AND
+    no exception was raised) — i.e. the tool's ``execute`` actually ran.
+    A ``signals_completion`` tool whose args were rejected by the
+    executor does NOT terminate the loop; the model gets the validation
+    error as a tool result on the next turn and can retry.
+
     Multiple invocations are unusual — we take the first, matching
     ``response.stop_reason == "end_turn"`` semantics.
     """
     for tc in tool_calls:
+        if tc.id not in succeeded_ids:
+            continue
         tool = registry.get(getattr(tc, "name", ""))
         if tool is not None and tool.signals_completion:
             args = getattr(tc, "arguments", None)
             if isinstance(args, dict):
-                return dict(args)
+                return dict(args), tc.name
     return None
 
 
@@ -297,4 +324,8 @@ def _build_result(state: RunState, content: str | None) -> LoopResult:
         strategy_used=state.strategy_name or "react",
         cost_usd=state.cost_usd,
         events=state.event_bus.events,
+        completion_payload=(
+            dict(state.completion_payload) if state.completion_payload is not None else None
+        ),
+        completion_tool=state.completion_tool,
     )

@@ -366,6 +366,29 @@ class MessagingService:
         records = await self._backend.query(CHANNELS_COLLECTION)
         return [Channel.model_validate(r) for r in records]
 
+    async def list_channel_messages(
+        self,
+        channel_name: str,
+        after_seq: int = 0,
+        limit: int = 100,
+    ) -> list[Message]:
+        """Read messages on a channel chronologically.
+
+        Wraps ``backend.read_stream`` against the channel's stream
+        (``arc.channel.{name}``). Used by observability surfaces (the
+        ArcUI Team Chat tab, CLI tools) that want a flat
+        oldest-to-newest view without tracking per-consumer cursors —
+        unlike ``poll``, this never advances any cursor.
+        """
+        stream = f"arc.channel.{channel_name}"
+        records = await self._backend.read_stream(
+            STREAMS_COLLECTION,
+            stream,
+            after_seq=after_seq,
+            limit=limit,
+        )
+        return [Message.model_validate(r) for r in records]
+
     # --- Threads ---
 
     async def get_thread(self, stream: str, thread_id: str) -> list[Message]:

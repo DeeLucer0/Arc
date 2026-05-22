@@ -268,6 +268,7 @@ class ToolRegistry:
                     input_schema=tool.input_schema,
                     execute=arcrun_execute,
                     timeout_seconds=None,
+                    signals_completion=tool.signals_completion,
                 )
             )
         return result

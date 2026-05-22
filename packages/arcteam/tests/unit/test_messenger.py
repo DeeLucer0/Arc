@@ -304,6 +304,61 @@ class TestChannelManagement:
             await svc.join_channel("nonexistent", "agent://a1")
 
 
+class TestListChannelMessages:
+    """``list_channel_messages`` is the read-side helper used by
+    observability surfaces (the arcui Team Chat tab) that want a flat
+    chronological view without manipulating per-consumer cursors."""
+
+    async def test_returns_messages_in_send_order(self, svc: MessagingService) -> None:
+        for body in ("first", "second", "third"):
+            await svc.send(
+                Message(
+                    sender="agent://a1",
+                    to=["channel://project-alpha"],
+                    body=body,
+                )
+            )
+        messages = await svc.list_channel_messages("project-alpha")
+        assert [m.body for m in messages] == ["first", "second", "third"]
+        # Sequence numbers strictly increase.
+        seqs = [m.seq for m in messages]
+        assert seqs == sorted(seqs)
+        assert seqs[0] >= 1
+
+    async def test_limit_clamps_window(self, svc: MessagingService) -> None:
+        for i in range(5):
+            await svc.send(
+                Message(
+                    sender="agent://a1",
+                    to=["channel://project-alpha"],
+                    body=f"m{i}",
+                )
+            )
+        page = await svc.list_channel_messages("project-alpha", limit=2)
+        assert [m.body for m in page] == ["m0", "m1"]
+
+    async def test_after_seq_paginates_forward(self, svc: MessagingService) -> None:
+        for i in range(3):
+            await svc.send(
+                Message(
+                    sender="agent://a1",
+                    to=["channel://project-alpha"],
+                    body=f"m{i}",
+                )
+            )
+        first = await svc.list_channel_messages("project-alpha", limit=2)
+        rest = await svc.list_channel_messages(
+            "project-alpha",
+            after_seq=first[-1].seq,
+            limit=10,
+        )
+        assert [m.body for m in rest] == ["m2"]
+
+    async def test_unknown_channel_returns_empty(self, svc: MessagingService) -> None:
+        messages = await svc.list_channel_messages("does-not-exist")
+        assert messages == []
+
+
 class TestBodyTooLarge:
     """Body too large: rejected, DLQ entry created."""
 

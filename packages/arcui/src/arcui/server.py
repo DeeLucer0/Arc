@@ -39,6 +39,7 @@ from arcui.routes import export as export_routes
 from arcui.routes import knowledge as knowledge_routes
 from arcui.routes import schedules as schedules_routes
 from arcui.routes import stats as stats_routes
+from arcui.routes import team_chat as team_chat_routes
 from arcui.routes import team_pages as team_pages_routes
 from arcui.routes import traces as traces_routes
 from arcui.routes import ws as ws_routes
@@ -117,6 +118,7 @@ def create_app(
     max_agents: int = 100,
     team_root: Path | None = None,
     gateway_config: Any | None = None,
+    messaging_service: Any | None = None,
 ) -> Starlette:
     """Build a Starlette application with all ArcUI routes.
 
@@ -161,6 +163,7 @@ def create_app(
         *agents_routes.routes,
         *agent_detail_routes.routes,
         *team_pages_routes.routes,
+        *team_chat_routes.routes,
     ]
 
     # Mount static files if the directory exists.
@@ -316,6 +319,10 @@ def create_app(
     app.state.auth_config = auth
     app.state.trace_store = trace_store
     app.state.config_controller = config_controller
+    # arcteam MessagingService used by the Team Chat routes. ``None`` is
+    # a supported state — the routes degrade to empty payloads so the
+    # Team Chat tab never throws when the deployment lacks a team_root.
+    app.state.messaging_service = messaging_service
     app.state.connection_manager = connection_manager
     app.state.aggregator = aggregator
     app.state.event_buffer = event_buffer

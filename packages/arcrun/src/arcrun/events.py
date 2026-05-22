@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import inspect
 import json
 import logging
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Any
@@ -88,13 +90,32 @@ def verify_chain(events: list[Event]) -> ChainVerificationResult:
 
 
 class EventBus:
-    """Emits events, collects them, optionally calls handler. Thread-safe."""
+    """Emits events, collects them, optionally calls handler. Thread-safe.
 
-    def __init__(self, run_id: str, on_event: Callable[[Event], None] | None = None) -> None:
+    Observers may be sync (``Callable[[Event], None]``) or async
+    (``Callable[[Event], Awaitable[None]]``). Async observers are
+    scheduled on the running event loop and tracked so the task isn't
+    garbage-collected before completion. If an async observer is passed
+    but ``emit`` is called from a sync context with no running loop, the
+    returned coroutine is closed and a warning is logged — silently
+    dropping the coroutine (Python's default) would emit a
+    ``RuntimeWarning: coroutine was never awaited`` and lose all observer
+    side effects (audit emits, UI HUD updates), which is an unforgiving
+    failure mode.
+    """
+
+    def __init__(
+        self,
+        run_id: str,
+        on_event: Callable[[Event], Awaitable[None] | None] | None = None,
+    ) -> None:
         self._run_id = run_id
         self._on_event = on_event
         self._events: list[Event] = []
         self._lock = threading.Lock()
+        # Strong refs to pending async-observer tasks so the loop doesn't
+        # GC them mid-flight. Tasks self-remove via done_callback.
+        self._pending_observer_tasks: set[asyncio.Task[Any]] = set()
 
     def emit(self, event_type: str, data: dict[str, Any] | None = None) -> Event:
         """Create event with hash chain, append to log, call handler if set."""
@@ -118,10 +139,34 @@ class EventBus:
         # Observer callback OUTSIDE lock to prevent deadlock
         if self._on_event is not None:
             try:
-                self._on_event(event)
+                result = self._on_event(event)
+                if inspect.iscoroutine(result):
+                    self._schedule_async_observer(result)
             except Exception:  # reason: fail-open — log + continue
                 logger.warning("Observer callback failed", exc_info=True)
         return event
+
+    def _schedule_async_observer(self, coro: Any) -> None:
+        """Schedule an async observer's coroutine on the running loop.
+
+        Holds a strong ref to the task until it finishes so it isn't
+        GC'd before the side effects run. If no loop is running we
+        close the coroutine and warn — leaving it un-awaited would
+        drop the side effects and emit a confusing RuntimeWarning.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            coro.close()
+            logger.warning(
+                "EventBus received an async on_event but no running loop is "
+                "available; observer coroutine was discarded. Call emit() "
+                "from an async context or pass a sync callable."
+            )
+            return
+        task = loop.create_task(coro)
+        self._pending_observer_tasks.add(task)
+        task.add_done_callback(self._pending_observer_tasks.discard)
 
     @property
     def events(self) -> list[Event]:

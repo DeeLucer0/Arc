@@ -42,5 +42,9 @@ class RunState:
     # here so the strategy can terminate cleanly on the next check.
     # ``None`` means no termination requested.
     completion_payload: dict[str, Any] | None = None
+    # Name of the tool whose ``signals_completion=True`` flag ended the
+    # loop. Surfaces on LoopResult so callers can distinguish multiple
+    # terminator tools without re-scanning the event chain.
+    completion_tool: str | None = None
     # Hard caps from config; enforced at the top of each turn.
     max_cost_usd: float | None = None

@@ -266,6 +266,33 @@ class TestToArcrunTools:
         assert callable(tool.execute)
         assert tool.timeout_seconds is None  # Our wrapper handles timeouts
 
+    def test_signals_completion_default_false(self, registry: ToolRegistry) -> None:
+        """A RegisteredTool that does not set signals_completion converts
+        to an arcrun.Tool with signals_completion=False."""
+        registry.register(_make_tool("read_file"))
+        tool = registry.to_arcrun_tools()[0]
+        assert tool.signals_completion is False
+
+    def test_signals_completion_pass_through(self, registry: ToolRegistry) -> None:
+        """A terminator RegisteredTool must surface its signals_completion
+        flag on the arcrun.Tool — otherwise the ReAct loop never recognises
+        the tool and structured-output agents have to bypass agent.run()."""
+
+        async def submit(**kwargs: Any) -> str:
+            return "ok"
+
+        tool = RegisteredTool(
+            name="submit_result",
+            description="Terminator that ends the turn with validated args",
+            input_schema={"type": "object", "properties": {"x": {"type": "integer"}}},
+            transport=ToolTransport.NATIVE,
+            execute=submit,
+            signals_completion=True,
+        )
+        registry.register(tool)
+        by_name = {t.name: t for t in registry.to_arcrun_tools()}
+        assert by_name["submit_result"].signals_completion is True
+
 
 class TestTimeoutEnforcement:
     async def test_tool_exceeds_timeout_raises(self, registry: ToolRegistry) -> None:

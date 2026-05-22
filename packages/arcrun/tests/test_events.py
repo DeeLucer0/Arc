@@ -417,3 +417,76 @@ class TestEventBus:
         events = bus.events
         events.clear()
         assert len(bus.events) == 1
+
+
+class TestAsyncOnEvent:
+    """Async observers must actually run.
+
+    Previously emit() called self._on_event(event) synchronously. An
+    ``async def`` callback returned a coroutine that was silently
+    discarded with a RuntimeWarning, dropping every observer side
+    effect. Demos paid for an hour of debugging chasing this once;
+    the bus now schedules async observers on the running loop.
+    """
+
+    @pytest.mark.asyncio
+    async def test_async_on_event_runs_to_completion(self):
+        import asyncio as _asyncio
+
+        from arcrun.events import EventBus
+
+        received: list[str] = []
+
+        async def observer(evt):
+            await _asyncio.sleep(0)  # yield once so a sync-fire would be visible
+            received.append(evt.type)
+
+        bus = EventBus(run_id="r", on_event=observer)
+        bus.emit("turn.start", {"n": 1})
+        bus.emit("turn.end", {"n": 1})
+
+        # Yield long enough for both scheduled observer tasks to complete.
+        for _ in range(5):
+            await _asyncio.sleep(0)
+
+        assert received == ["turn.start", "turn.end"]
+
+    @pytest.mark.asyncio
+    async def test_async_observer_exception_isolated(self):
+        import asyncio as _asyncio
+
+        from arcrun.events import EventBus
+
+        async def bad_observer(evt):
+            raise ValueError("boom")
+
+        bus = EventBus(run_id="r", on_event=bad_observer)
+        bus.emit("x")
+        # Drain pending observer tasks; failures must not propagate.
+        for _ in range(5):
+            await _asyncio.sleep(0)
+        assert len(bus.events) == 1
+
+    def test_async_on_event_no_running_loop_closes_coroutine(self, caplog):
+        """When emit() runs in a sync context, we close the coroutine
+        rather than leak ``coroutine was never awaited``."""
+        import logging
+
+        from arcrun.events import EventBus
+
+        async def observer(evt):
+            return None
+
+        bus = EventBus(run_id="r", on_event=observer)
+        with caplog.at_level(logging.WARNING, logger="arcrun.events"):
+            bus.emit("x")
+        assert "no running loop" in caplog.text
+
+    def test_sync_on_event_still_works(self):
+        """Sync observers must behave exactly as before the async patch."""
+        from arcrun.events import EventBus
+
+        received: list[str] = []
+        bus = EventBus(run_id="r", on_event=lambda evt: received.append(evt.type))
+        bus.emit("turn.start")
+        assert received == ["turn.start"]

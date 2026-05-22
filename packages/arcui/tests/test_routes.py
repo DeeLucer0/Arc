@@ -100,9 +100,12 @@ class TestTracesRoute:
         assert resp.json()["trace_id"] == rec.trace_id
 
     def test_get_trace_invalid_format(self):
+        # _VALID_TRACE_ID_RE rejects disallowed chars (whitespace, `;<>`,
+        # control bytes) and lengths over 128. Use a clearly-bad id here
+        # so the test exercises validation rather than not-found.
         _, client, _ = _make_app()
         resp = client.get(
-            "/api/traces/nonexistent",
+            "/api/traces/bad;DROP TABLE traces",
             headers={"Authorization": "Bearer viewer-tok"},
         )
         assert resp.status_code == 400
@@ -114,6 +117,25 @@ class TestTracesRoute:
             headers={"Authorization": "Bearer viewer-tok"},
         )
         assert resp.status_code == 404
+
+    def test_get_trace_accepts_real_world_id_formats(self):
+        """Trace IDs flow from many producers (chat_handler emits
+        ``chat-NNN``, demo orchestrators emit ``run-abc:role``,
+        ui_reporter emits ``trace-NNN-N``). All must pass validation
+        and reach the store (404 means it got past the regex)."""
+        _, client, _ = _make_app()
+        for trace_id in (
+            "chat-1779479813978",
+            "run-abc1234:approver",
+            "trace-1779479813-7",
+            "550e8400-e29b-41d4-a716-446655440000",
+            "deadbeefdeadbeefdeadbeefdeadbeef",
+        ):
+            resp = client.get(
+                f"/api/traces/{trace_id}",
+                headers={"Authorization": "Bearer viewer-tok"},
+            )
+            assert resp.status_code != 400, f"trace_id {trace_id!r} unexpectedly rejected"
 
 
 class TestConfigRoute:

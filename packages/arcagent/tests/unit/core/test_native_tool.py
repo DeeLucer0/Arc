@@ -172,3 +172,26 @@ class TestNativeToolDecorator:
         assert minimal.tool.when_to_use == ""
         assert minimal.tool.example == ""
         assert minimal.tool.category == ""
+
+    def test_signals_completion_defaults_false(self) -> None:
+        @native_tool(description="Plain tool")
+        async def plain(**kw: Any) -> str:
+            return ""
+
+        assert plain.tool.signals_completion is False
+
+    def test_signals_completion_opt_in(self) -> None:
+        """Terminator tools opt in via the decorator kwarg — the flag is
+        what tells the ReAct loop to end the turn on this tool's
+        invocation."""
+
+        @native_tool(
+            description="End the turn with a verdict",
+            params={"verdict": "yes or no"},
+            required=["verdict"],
+            signals_completion=True,
+        )
+        async def submit(verdict: str = "", **kw: Any) -> str:
+            return "ok"
+
+        assert submit.tool.signals_completion is True

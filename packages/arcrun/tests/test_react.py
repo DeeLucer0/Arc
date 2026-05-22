@@ -407,3 +407,108 @@ class TestSignalsCompletion:
         result = await react_loop(model, state, sandbox, max_turns=5)
         assert state.completion_payload is None
         assert result.content == "continued"
+
+    @pytest.mark.asyncio
+    async def test_loop_result_exposes_completion_payload_and_tool(self):
+        """LoopResult.completion_payload and .completion_tool let callers
+        read the validated terminator args without closure-capture or
+        event-scraping ceremony."""
+
+        async def finish(params: dict, ctx: object) -> str:
+            return "ok"
+
+        terminator = Tool(
+            name="submit_result",
+            description="terminator",
+            input_schema={
+                "type": "object",
+                "properties": {"verdict": {"type": "string"}},
+                "required": ["verdict"],
+            },
+            execute=finish,
+            signals_completion=True,
+        )
+        bus = EventBus(run_id="test")
+        state = _make_state(bus, tools=[terminator])
+        model = MockModel(
+            [
+                LLMResponse(
+                    tool_calls=[
+                        ToolCall(
+                            id="tc1",
+                            name="submit_result",
+                            arguments={"verdict": "yes"},
+                        )
+                    ],
+                    stop_reason="tool_use",
+                ),
+            ]
+        )
+        sandbox = Sandbox(config=None, event_bus=bus)
+
+        result = await react_loop(model, state, sandbox, max_turns=5)
+
+        assert result.completion_payload == {"verdict": "yes"}
+        assert result.completion_tool == "submit_result"
+
+    @pytest.mark.asyncio
+    async def test_invalid_completion_args_do_not_terminate_loop(self):
+        """When a signals_completion tool is called with args that fail
+        schema validation, the loop must NOT end with unvalidated args.
+        The model gets the validation error as a tool result and can
+        retry on the next turn — when it does, the loop terminates with
+        the validated payload."""
+
+        calls: list[dict] = []
+
+        async def finish(params: dict, ctx: object) -> str:
+            calls.append(dict(params))
+            return "ok"
+
+        terminator = Tool(
+            name="submit_result",
+            description="terminator",
+            input_schema={
+                "type": "object",
+                "properties": {"verdict": {"type": "string", "enum": ["yes", "no"]}},
+                "required": ["verdict"],
+            },
+            execute=finish,
+            signals_completion=True,
+        )
+        bus = EventBus(run_id="test")
+        state = _make_state(bus, tools=[terminator])
+        model = MockModel(
+            [
+                LLMResponse(
+                    tool_calls=[
+                        ToolCall(
+                            id="tc-bad",
+                            name="submit_result",
+                            arguments={"verdict": "maybe"},  # not in enum
+                        )
+                    ],
+                    stop_reason="tool_use",
+                ),
+                LLMResponse(
+                    tool_calls=[
+                        ToolCall(
+                            id="tc-good",
+                            name="submit_result",
+                            arguments={"verdict": "yes"},
+                        )
+                    ],
+                    stop_reason="tool_use",
+                ),
+            ]
+        )
+        sandbox = Sandbox(config=None, event_bus=bus)
+
+        result = await react_loop(model, state, sandbox, max_turns=5)
+
+        # Turn 1's call had invalid args — execute should NOT have fired.
+        # Turn 2's call had valid args — execute fires, loop ends.
+        assert calls == [{"verdict": "yes"}]
+        assert result.completion_payload == {"verdict": "yes"}
+        assert result.completion_tool == "submit_result"
+        assert result.turns == 2
