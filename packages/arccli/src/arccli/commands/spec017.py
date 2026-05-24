@@ -1,75 +1,52 @@
-"""SPEC-017 Phase 8 — CLI groups for policy / completion / schedule.
+"""SPEC-017 Phase 8 — policy / completion / schedule introspection helpers.
 
-These Click groups are thin wrappers around core APIs that favor
-scriptability (JSON output) so CI pipelines can consume them.
+Thin Python functions wrapping core APIs. Each returns a JSON-serializable
+dict; callers that want CLI exposure can register them through the slash-
+command registry. (Original Click groups were dead-coded — never wired into
+the arccli command tree — so the CLI shell was removed to satisfy the
+"no click in arccli" architecture rule. The behavior is preserved.)
 
-Extracted from arccli.agent (legacy Click module) to keep the Click
-dependency contained and allow the main agent dispatch layer to be
-pure argparse.
-
-Public exports: policy_group, completion_group, schedule_group
+Public exports: ``policy_layers``, ``policy_evaluate``,
+``completion_history``, ``schedule_list``, ``schedule_migrate``.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
-import sys
-from typing import Any
+from pathlib import Path
+from typing import Any, Literal
 
-import click
+Tier = Literal["federal", "enterprise", "personal"]
 
-from arccli.formatting import click_echo
 
 # ---------------------------------------------------------------------------
-# policy group
+# policy
 # ---------------------------------------------------------------------------
 
 
-@click.group("policy")
-def policy_group() -> None:
-    """Inspect the tool-policy pipeline."""
-
-
-@policy_group.command("layers")
-@click.option(
-    "--tier",
-    type=click.Choice(["federal", "enterprise", "personal"]),
-    default="personal",
-    show_default=True,
-)
-def policy_layers(tier: str) -> None:
-    """List layers active for the given tier."""
+def policy_layers(tier: Tier = "personal") -> dict[str, Any]:
+    """Return the layers active for the given tier."""
     from arcagent.core.tool_policy import build_pipeline
 
-    pipeline = build_pipeline(tier=tier)  # type: ignore[arg-type]  # reason: tier is `str` validated by Click's Choice above; build_pipeline takes Literal["federal","enterprise","personal"]
-    names = [layer.name for layer in pipeline.layers]
-    click_echo(json.dumps({"tier": tier, "layers": names}, indent=2))
+    pipeline = build_pipeline(tier=tier)
+    return {
+        "tier": tier,
+        "layers": [layer.name for layer in pipeline.layers],
+    }
 
 
-@policy_group.command("evaluate")
-@click.option(
-    "--tier",
-    type=click.Choice(["federal", "enterprise", "personal"]),
-    default="personal",
-)
-@click.option("--tool", "tool_name", required=True, help="Tool name to evaluate.")
-@click.option("--agent-did", "agent_did", default="did:arc:cli")
-@click.option(
-    "--classification",
-    default="unclassified",
-    show_default=True,
-)
-def policy_evaluate(tier: str, tool_name: str, agent_did: str, classification: str) -> None:
-    """Dry-run evaluate a tool call; print the decision as JSON."""
-    import asyncio as _asyncio
+def policy_evaluate(
+    *,
+    tool_name: str,
+    tier: Tier = "personal",
+    agent_did: str = "did:arc:cli",
+    classification: str = "unclassified",
+) -> dict[str, Any]:
+    """Dry-run a tool-call decision and return the serialized verdict."""
+    from arcagent.core.tool_policy import PolicyContext, ToolCall, build_pipeline
 
-    from arcagent.core.tool_policy import (
-        PolicyContext,
-        ToolCall,
-        build_pipeline,
-    )
-
-    pipeline = build_pipeline(tier=tier)  # type: ignore[arg-type]  # reason: tier is `str` validated by Click's Choice above; build_pipeline takes Literal["federal","enterprise","personal"]
+    pipeline = build_pipeline(tier=tier)
     call = ToolCall(
         tool_name=tool_name,
         arguments={},
@@ -77,37 +54,26 @@ def policy_evaluate(tier: str, tool_name: str, agent_did: str, classification: s
         session_id="cli",
         classification=classification,
     )
-    ctx = PolicyContext(tier=tier, policy_version="v1", bundle_age_seconds=0.0)  # type: ignore[arg-type]  # reason: tier is `str` validated by Click's Choice above; PolicyContext takes Literal[...]
-    decision = _asyncio.run(pipeline.evaluate(call, ctx))
-    click_echo(json.dumps(decision.model_dump(), indent=2))
+    ctx = PolicyContext(tier=tier, policy_version="v1", bundle_age_seconds=0.0)
+    decision = asyncio.run(pipeline.evaluate(call, ctx))
+    return decision.model_dump()
 
 
 # ---------------------------------------------------------------------------
-# completion group
+# completion
 # ---------------------------------------------------------------------------
 
 
-@click.group("completion")
-def completion_group() -> None:
-    """Inspect ``task_complete`` history (reads audit log)."""
+def completion_history(path: str = ".", limit: int = 20) -> dict[str, Any]:
+    """Return the most recent ``loop.completed`` events from the audit log.
 
-
-@completion_group.command("history")
-@click.option("--path", default=".", help="Agent workspace path.", show_default=True)
-@click.option("--limit", type=int, default=20, show_default=True)
-def completion_history(path: str, limit: int) -> None:
-    """Print the most recent ``task_complete`` events from the audit log.
-
-    Reads the workspace's ``audit/`` directory and filters for
-    ``loop.completed`` events. Output is JSON for easy piping.
+    Reads ``workspace/audit/*.jsonl`` and filters for completion events.
     """
-    from pathlib import Path as _Path
-
-    agent_dir = _Path(path).resolve()
+    agent_dir = Path(path).resolve()
     audit_dir = agent_dir / "workspace" / "audit"
     if not audit_dir.exists():
-        click_echo(json.dumps({"events": []}))
-        return
+        return {"events": []}
+
     events: list[dict[str, Any]] = []
     for log_file in sorted(audit_dir.glob("*.jsonl"), reverse=True):
         for line in reversed(log_file.read_text(encoding="utf-8").splitlines()):
@@ -123,69 +89,42 @@ def completion_history(path: str, limit: int) -> None:
                     break
         if len(events) >= limit:
             break
-    click_echo(json.dumps({"events": events}, indent=2))
+    return {"events": events}
 
 
 # ---------------------------------------------------------------------------
-# schedule group
+# schedule
 # ---------------------------------------------------------------------------
 
 
-@click.group("schedule")
-def schedule_group() -> None:
-    """Manage proactive schedules (replaces legacy scheduler CLI)."""
-
-
-@schedule_group.command("list")
-@click.option("--path", default=".", help="Agent workspace path.", show_default=True)
-def schedule_list(path: str) -> None:
-    """List persisted schedules from the workspace state file.
-
-    Reads ``workspace/proactive/schedules.json`` — schedules are
-    written there by the engine on every mutation. Safe to run while
-    the agent is offline.
-    """
-    from pathlib import Path as _Path
-
-    agent_dir = _Path(path).resolve()
+def schedule_list(path: str = ".") -> dict[str, Any]:
+    """Return persisted schedules from ``workspace/proactive/schedules.json``."""
+    agent_dir = Path(path).resolve()
     state_file = agent_dir / "workspace" / "proactive" / "schedules.json"
     if not state_file.exists():
-        click_echo(json.dumps({"schedules": []}))
-        return
-    click_echo(state_file.read_text(encoding="utf-8"))
+        return {"schedules": []}
+    return json.loads(state_file.read_text(encoding="utf-8"))
 
 
-@schedule_group.command("migrate")
-@click.option("--path", default=".", help="Agent workspace path.", show_default=True)
-@click.option("--dry-run", is_flag=True, help="Print migration plan without writing.")
-def schedule_migrate(path: str, dry_run: bool) -> None:
-    """One-time migration from legacy scheduler state to the proactive engine.
+def schedule_migrate(path: str = ".", *, dry_run: bool = False) -> dict[str, Any]:
+    """One-time migration from legacy ``workspace/scheduler/`` JSONL state.
 
-    SPEC-017 R-040 deleted ``modules/scheduler/`` and its persisted
-    state format. Deployments upgrading from arc-agent < 0.3.0 must
-    run this command once to convert their old schedule definitions.
-
-    Reads ``workspace/scheduler/`` (legacy JSONL state) and emits
-    ``workspace/proactive/schedules.json`` in the new format.
+    SPEC-017 R-040 deleted ``modules/scheduler/`` and its persisted state
+    format. Deployments upgrading from arc-agent < 0.3.0 must run this once
+    to convert their old schedule definitions into the proactive engine's
+    ``workspace/proactive/schedules.json`` layout.
     """
-    from pathlib import Path as _Path
-
-    agent_dir = _Path(path).resolve()
+    agent_dir = Path(path).resolve()
     legacy_dir = agent_dir / "workspace" / "scheduler"
     target_dir = agent_dir / "workspace" / "proactive"
     target_file = target_dir / "schedules.json"
 
     if not legacy_dir.exists():
-        click_echo(
-            json.dumps(
-                {
-                    "status": "no-op",
-                    "reason": "legacy scheduler/ directory not present",
-                    "legacy_dir": str(legacy_dir),
-                }
-            )
-        )
-        return
+        return {
+            "status": "no-op",
+            "reason": "legacy scheduler/ directory not present",
+            "legacy_dir": str(legacy_dir),
+        }
 
     migrated: list[dict[str, Any]] = []
     for state_file in sorted(legacy_dir.glob("*.jsonl")):
@@ -211,19 +150,16 @@ def schedule_migrate(path: str, dry_run: bool) -> None:
                 }
             )
 
-    plan: dict[str, Any] = {
+    if not dry_run:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target_file.write_text(
+            json.dumps({"schedules": migrated}, indent=2),
+            encoding="utf-8",
+        )
+
+    return {
         "status": "dry-run" if dry_run else "migrated",
         "count": len(migrated),
         "target": str(target_file),
         "schedules": migrated,
     }
-
-    if not dry_run:
-        target_dir.mkdir(parents=True, exist_ok=True)
-        target_file.write_text(json.dumps({"schedules": migrated}, indent=2), encoding="utf-8")
-
-    click_echo(json.dumps(plan, indent=2))
-
-
-# Suppress unused import warning — sys imported for potential future use
-_ = sys
