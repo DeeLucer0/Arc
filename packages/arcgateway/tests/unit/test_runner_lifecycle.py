@@ -25,7 +25,7 @@ from unittest.mock import patch
 
 import pytest
 
-from arcgateway.adapters.base import FailedAdapter
+from arcgateway.adapters._reconnect import FailedAdapter
 from arcgateway.executor import AsyncioExecutor
 from arcgateway.runner import GatewayAlreadyRunning, GatewayRunner
 
@@ -431,7 +431,7 @@ def test_failed_adapter_backoff_math() -> None:
 @pytest.mark.asyncio
 async def test_reconnect_watcher_attempts_reconnect() -> None:
     """reconnect_watcher() attempts connect() on failed adapters."""
-    from arcgateway.adapters.base import reconnect_watcher
+    from arcgateway.adapters._reconnect import reconnect_watcher
 
     connected: list[str] = []
 
@@ -467,7 +467,7 @@ async def test_reconnect_watcher_attempts_reconnect() -> None:
 @pytest.mark.asyncio
 async def test_reconnect_watcher_marks_permanently_failed() -> None:
     """reconnect_watcher() marks adapter permanently failed after 20 attempts."""
-    from arcgateway.adapters.base import _MAX_RECONNECT_ATTEMPTS, reconnect_watcher
+    from arcgateway.adapters._reconnect import _MAX_RECONNECT_ATTEMPTS, reconnect_watcher
 
     class _AlwaysFailAdapter(_StubAdapter):
         async def connect(self) -> None:

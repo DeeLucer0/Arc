@@ -63,7 +63,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from arcgateway.adapters.base import BasePlatformAdapter, FailedAdapter, reconnect_watcher
+from arcgateway.adapters._reconnect import FailedAdapter, reconnect_watcher
+from arcgateway.adapters.base import BasePlatformAdapter
 from arcgateway.delivery import DeliverySenderImpl
 from arcgateway.executor import AsyncioExecutor, Executor, SubprocessExecutor
 from arcgateway.session import SessionRouter

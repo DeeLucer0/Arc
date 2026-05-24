@@ -20,14 +20,14 @@ from typing import Any
 
 import pytest
 
-from arcgateway.adapters.base import (
+from arcgateway.adapters._reconnect import (
     _BACKOFF_BASE_SECONDS,
     _BACKOFF_MAX_SECONDS,
     _MAX_RECONNECT_ATTEMPTS,
-    BasePlatformAdapter,
     FailedAdapter,
     reconnect_watcher,
 )
+from arcgateway.adapters.base import BasePlatformAdapter
 from arcgateway.delivery import DeliveryTarget
 
 # ---------------------------------------------------------------------------
