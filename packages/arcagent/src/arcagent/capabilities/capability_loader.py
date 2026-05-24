@@ -43,14 +43,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from arcagent.core.capability_registry import (
+from arcagent.capabilities.capability_registry import (
     BackgroundTaskEntry,
     CapabilityRegistry,
     HookEntry,
     LifecycleEntry,
     ToolEntry,
 )
-from arcagent.core.skill_validator import validate_skill_folder
+from arcagent.capabilities.skill_validator import validate_skill_folder
 from arcagent.tools._decorator import (
     BackgroundTaskMetadata,
     CapabilityClassMetadata,
@@ -64,7 +64,7 @@ from arcagent.tools._dynamic_loader import AstValidationCache
 # operator-curated; their authors are responsible for safety.
 _UNTRUSTED_ROOTS: frozenset[str] = frozenset({"workspace"})
 
-_logger = logging.getLogger("arcagent.core.capability_loader")
+_logger = logging.getLogger("arcagent.capabilities.capability_loader")
 
 # Type alias for a (root_name, root_path) pair.
 ScanRoot = tuple[str, Path]

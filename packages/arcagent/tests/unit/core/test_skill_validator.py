@@ -33,13 +33,13 @@ def _write_skill(folder: Path, *, body: str | None = None) -> Path:
 
 class TestFrontmatterValidation:
     def test_missing_skill_md(self, tmp_path: Path) -> None:
-        from arcagent.core.skill_validator import validate_skill_folder
+        from arcagent.capabilities.skill_validator import validate_skill_folder
 
         result = validate_skill_folder(tmp_path / "no-skill", "builtins")
         assert any(e.code == "missing_skill_md" for e in result.errors)
 
     def test_no_frontmatter(self, tmp_path: Path) -> None:
-        from arcagent.core.skill_validator import validate_skill_folder
+        from arcagent.capabilities.skill_validator import validate_skill_folder
 
         folder = tmp_path / "broken"
         folder.mkdir()
@@ -48,7 +48,7 @@ class TestFrontmatterValidation:
         assert any(e.code == "malformed_frontmatter" for e in result.errors)
 
     def test_missing_required_field(self, tmp_path: Path) -> None:
-        from arcagent.core.skill_validator import validate_skill_folder
+        from arcagent.capabilities.skill_validator import validate_skill_folder
 
         folder = tmp_path / "skill"
         folder.mkdir()
@@ -70,7 +70,7 @@ class TestFrontmatterValidation:
 
 class TestSectionValidation:
     def test_missing_section_rejected(self, tmp_path: Path) -> None:
-        from arcagent.core.skill_validator import validate_skill_folder
+        from arcagent.capabilities.skill_validator import validate_skill_folder
 
         bad_body = (
             "## Resources\n## Contract\n## Knowledge\n"
@@ -83,7 +83,7 @@ class TestSectionValidation:
         assert "Steps" in result.errors[0].detail
 
     def test_complete_skill_ok(self, tmp_path: Path) -> None:
-        from arcagent.core.skill_validator import validate_skill_folder
+        from arcagent.capabilities.skill_validator import validate_skill_folder
 
         _write_skill(tmp_path / "skill")
         result = validate_skill_folder(tmp_path / "skill", "builtins")
@@ -94,7 +94,7 @@ class TestSectionValidation:
 
 class TestFillerDetection:
     def test_na_section_warns(self, tmp_path: Path) -> None:
-        from arcagent.core.skill_validator import validate_skill_folder
+        from arcagent.capabilities.skill_validator import validate_skill_folder
 
         bad_body = (
             "## Resources\n\n## Contract\n\n## Knowledge\n\n## Steps\n"
@@ -107,7 +107,7 @@ class TestFillerDetection:
 
     def test_resources_filler_ignored(self, tmp_path: Path) -> None:
         """``## Resources`` is auto-filled — empty there is fine."""
-        from arcagent.core.skill_validator import validate_skill_folder
+        from arcagent.capabilities.skill_validator import validate_skill_folder
 
         # Default body has empty Resources; should not warn.
         _write_skill(tmp_path / "skill")
@@ -119,7 +119,7 @@ class TestFillerDetection:
 
 class TestToolDependencyCheck:
     def test_missing_tool_warns(self, tmp_path: Path) -> None:
-        from arcagent.core.skill_validator import validate_skill_folder
+        from arcagent.capabilities.skill_validator import validate_skill_folder
 
         _write_skill(tmp_path / "skill")
         result = validate_skill_folder(
@@ -131,7 +131,7 @@ class TestToolDependencyCheck:
         assert "write" in result.warnings[-1].detail
 
     def test_all_tools_present_no_warning(self, tmp_path: Path) -> None:
-        from arcagent.core.skill_validator import validate_skill_folder
+        from arcagent.capabilities.skill_validator import validate_skill_folder
 
         _write_skill(tmp_path / "skill")
         result = validate_skill_folder(
@@ -144,7 +144,7 @@ class TestToolDependencyCheck:
 
 class TestRenderResourcesSection:
     def test_empty_folder(self, tmp_path: Path) -> None:
-        from arcagent.core.skill_validator import render_resources_section
+        from arcagent.capabilities.skill_validator import render_resources_section
 
         folder = tmp_path / "empty"
         folder.mkdir()
@@ -153,7 +153,7 @@ class TestRenderResourcesSection:
         assert "(no resources)" in rendered
 
     def test_full_folder_listing(self, tmp_path: Path) -> None:
-        from arcagent.core.skill_validator import render_resources_section
+        from arcagent.capabilities.skill_validator import render_resources_section
 
         folder = tmp_path / "skill"
         folder.mkdir()

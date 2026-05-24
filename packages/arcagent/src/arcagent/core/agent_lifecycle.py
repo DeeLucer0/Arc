@@ -22,8 +22,8 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from arcagent.core.capability_loader import CapabilityLoader
-from arcagent.core.capability_registry import CapabilityRegistry
+from arcagent.capabilities.capability_loader import CapabilityLoader
+from arcagent.capabilities.capability_registry import CapabilityRegistry
 from arcagent.core.module_bus import EventContext
 from arcagent.core.tool_registry import RegisteredTool, ToolTransport
 

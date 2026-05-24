@@ -34,8 +34,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from arcagent.core.capability_loader import CapabilityLoader
-from arcagent.core.capability_registry import CapabilityRegistry
+from arcagent.capabilities.capability_loader import CapabilityLoader
+from arcagent.capabilities.capability_registry import CapabilityRegistry
 from arcagent.core.config import EvalConfig
 from arcagent.modules.memory import _runtime
 

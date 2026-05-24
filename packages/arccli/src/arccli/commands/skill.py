@@ -161,7 +161,7 @@ def _discover_skills_fallback(agent_dir: str | None) -> list[dict[str, str]]:
 def _get_skills(agent_dir: str | None) -> list[Any]:
     """Discover skills via arcagent's validator when available."""
     try:
-        from arcagent.core.skill_validator import validate_skill_folder
+        from arcagent.capabilities.skill_validator import validate_skill_folder
     except ImportError:
         return _discover_skills_fallback(agent_dir)
 
@@ -271,7 +271,7 @@ def _validate(args: argparse.Namespace) -> None:
         sys.exit(1)
 
     try:
-        from arcagent.core.skill_validator import validate_skill_folder
+        from arcagent.capabilities.skill_validator import validate_skill_folder
     except ImportError:
         sys.stderr.write(
             "Error: arcagent is not installed; install it to validate skill folders.\n"

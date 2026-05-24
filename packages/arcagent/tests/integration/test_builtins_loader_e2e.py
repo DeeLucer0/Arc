@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from arcagent.core.capability_loader import CapabilityLoader
-from arcagent.core.capability_registry import CapabilityRegistry
+from arcagent.capabilities.capability_loader import CapabilityLoader
+from arcagent.capabilities.capability_registry import CapabilityRegistry
 
 
 @pytest.mark.asyncio

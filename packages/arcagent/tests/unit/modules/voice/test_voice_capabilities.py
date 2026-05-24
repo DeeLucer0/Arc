@@ -31,8 +31,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from arcagent.core.capability_loader import CapabilityLoader
-from arcagent.core.capability_registry import CapabilityRegistry
+from arcagent.capabilities.capability_loader import CapabilityLoader
+from arcagent.capabilities.capability_registry import CapabilityRegistry
 from arcagent.modules.voice import _runtime
 from arcagent.modules.voice.errors import AirGapProviderRequired
 from arcagent.modules.voice.protocols import TranscriptionResult

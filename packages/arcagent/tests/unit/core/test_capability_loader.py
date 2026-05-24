@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pytest
 
-from arcagent.core.capability_registry import CapabilityRegistry
+from arcagent.capabilities.capability_registry import CapabilityRegistry
 
 
 def _write_tool(path: Path, name: str, *, version: str = "1.0.0") -> None:
@@ -73,7 +73,7 @@ def four_roots(tmp_path: Path) -> dict[str, Path]:
 @pytest.mark.asyncio
 class TestScanAndRegister:
     async def test_registers_a_tool(self, four_roots: dict[str, Path]) -> None:
-        from arcagent.core.capability_loader import CapabilityLoader
+        from arcagent.capabilities.capability_loader import CapabilityLoader
 
         _write_tool(four_roots["builtins"] / "echo.py", "echo")
 
@@ -86,7 +86,7 @@ class TestScanAndRegister:
         assert entry.scan_root == "builtins"
 
     async def test_registers_a_skill(self, four_roots: dict[str, Path]) -> None:
-        from arcagent.core.capability_loader import CapabilityLoader
+        from arcagent.capabilities.capability_loader import CapabilityLoader
 
         _write_skill(four_roots["builtins"] / "create-tool", "create-tool")
 
@@ -103,7 +103,7 @@ class TestScanAndRegister:
 class TestScanPrecedence:
     async def test_workspace_overrides_builtins(self, four_roots: dict[str, Path]) -> None:
         """When the same name appears in two roots, later-scanned wins."""
-        from arcagent.core.capability_loader import CapabilityLoader
+        from arcagent.capabilities.capability_loader import CapabilityLoader
 
         _write_tool(four_roots["builtins"] / "echo.py", "echo", version="1.0.0")
         _write_tool(four_roots["workspace"] / "echo.py", "echo", version="2.0.0")
@@ -121,7 +121,7 @@ class TestScanPrecedence:
 @pytest.mark.asyncio
 class TestReloadDiff:
     async def test_diff_added_only(self, four_roots: dict[str, Path]) -> None:
-        from arcagent.core.capability_loader import CapabilityLoader
+        from arcagent.capabilities.capability_loader import CapabilityLoader
 
         _write_tool(four_roots["builtins"] / "a.py", "a")
         _write_tool(four_roots["builtins"] / "b.py", "b")
@@ -138,7 +138,7 @@ class TestReloadDiff:
     async def test_diff_with_errors_multi_line(self, four_roots: dict[str, Path]) -> None:
         """Untrusted (workspace) source goes through AST validator;
         a privileged import rejects with `1 error` in the diff."""
-        from arcagent.core.capability_loader import CapabilityLoader
+        from arcagent.capabilities.capability_loader import CapabilityLoader
 
         _write_tool(four_roots["builtins"] / "ok.py", "ok")
         # Workspace = untrusted root → AST-validated.
@@ -153,7 +153,7 @@ class TestReloadDiff:
         assert "\n" in diff  # error path is multi-line
 
     async def test_replaced_segment(self, four_roots: dict[str, Path]) -> None:
-        from arcagent.core.capability_loader import CapabilityLoader
+        from arcagent.capabilities.capability_loader import CapabilityLoader
 
         _write_tool(four_roots["builtins"] / "x.py", "x", version="1.0.0")
         reg = CapabilityRegistry()
@@ -171,13 +171,13 @@ class TestReloadDiff:
 class TestCapabilityLifecycleOrder:
     async def test_topo_setup_and_reverse_teardown(self, four_roots: dict[str, Path]) -> None:
         """A → B → C dependency chain. Setup A,B,C; shutdown C,B,A."""
-        from arcagent.core.capability_loader import CapabilityLoader
+        from arcagent.capabilities.capability_loader import CapabilityLoader
 
         order: list[str] = []
 
         # Class capabilities are written via test fixtures rather than
         # source files for isolation — they register through a hook.
-        from arcagent.core.capability_registry import LifecycleEntry
+        from arcagent.capabilities.capability_registry import LifecycleEntry
         from arcagent.tools._decorator import (
             CapabilityClassMetadata,
         )
@@ -238,8 +238,8 @@ class TestCapabilityLifecycleOrder:
 
     async def test_rollback_on_setup_failure(self, four_roots: dict[str, Path]) -> None:
         """If B's setup raises, A's teardown runs; C never starts."""
-        from arcagent.core.capability_loader import CapabilityLoader
-        from arcagent.core.capability_registry import LifecycleEntry
+        from arcagent.capabilities.capability_loader import CapabilityLoader
+        from arcagent.capabilities.capability_registry import LifecycleEntry
         from arcagent.tools._decorator import CapabilityClassMetadata
 
         order: list[str] = []

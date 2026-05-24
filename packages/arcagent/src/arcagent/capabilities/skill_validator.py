@@ -28,7 +28,7 @@ from typing import Any
 
 import yaml
 
-from arcagent.core.capability_registry import SkillEntry
+from arcagent.capabilities.capability_registry import SkillEntry
 
 REQUIRED_FRONTMATTER: tuple[str, ...] = (
     "name",

@@ -53,7 +53,7 @@ from arcagent.core.agent_handle import (
     _validate_steering_message,
 )
 from arcagent.core.agent_lifecycle import setup_capabilities
-from arcagent.core.capability_registry import SkillEntry
+from arcagent.capabilities.capability_registry import SkillEntry
 from arcagent.core.config import ArcAgentConfig
 from arcagent.core.model_manager import (
     create_arcllm_bridge,

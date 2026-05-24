@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-from arcagent.core.capability_registry import (
+from arcagent.capabilities.capability_registry import (
     CapabilityRegistry,
     LifecycleEntry,
     ToolEntry,
@@ -54,7 +54,7 @@ async def _noop(**_: object) -> str:
 @pytest.mark.asyncio
 class TestRegistrationFailedEvent:
     async def test_ast_failure_emits_registration_failed(self, tmp_path: Path) -> None:
-        from arcagent.core.capability_loader import CapabilityLoader
+        from arcagent.capabilities.capability_loader import CapabilityLoader
 
         workspace = tmp_path / "workspace"
         workspace.mkdir()
@@ -84,7 +84,7 @@ class TestRegistrationFailedEvent:
         assert "category" in payload or "reason" in payload
 
     async def test_skill_missing_frontmatter_emits_failed(self, tmp_path: Path) -> None:
-        from arcagent.core.capability_loader import CapabilityLoader
+        from arcagent.capabilities.capability_loader import CapabilityLoader
 
         builtins_root = tmp_path / "builtins"
         skill_folder = builtins_root / "broken-skill"
@@ -113,7 +113,7 @@ class TestRegistrationFailedEvent:
 @pytest.mark.asyncio
 class TestSetupFailedEvent:
     async def test_setup_raise_emits_setup_failed(self, tmp_path: Path) -> None:
-        from arcagent.core.capability_loader import CapabilityLoader
+        from arcagent.capabilities.capability_loader import CapabilityLoader
 
         bus = ModuleBus()
         events: list[tuple[str, dict]] = []

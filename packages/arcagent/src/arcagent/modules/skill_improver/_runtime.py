@@ -12,7 +12,7 @@ Mirrors the pattern in :mod:`arcagent.modules.policy._runtime` and
 The ``skill_registry`` field is duck-typed (``Any``) to decouple from
 the legacy :class:`arcagent.core.skill_registry.SkillRegistry`. The
 agent rewire layer may pass either the legacy registry or a wrapper
-around :class:`arcagent.core.capability_registry.CapabilityRegistry`
+around :class:`arcagent.capabilities.capability_registry.CapabilityRegistry`
 that exposes the same ``.skills`` list and ``.discover(...)`` no-op
 surface. This module never imports from ``arcagent.core.skill_registry``.
 """

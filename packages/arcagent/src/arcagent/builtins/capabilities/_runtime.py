@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from arcagent.core.capability_loader import CapabilityLoader
+    from arcagent.capabilities.capability_loader import CapabilityLoader
 
 _workspace: Path | None = None
 _allowed_paths: list[Path] | None = None

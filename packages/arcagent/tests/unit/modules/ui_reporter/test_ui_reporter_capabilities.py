@@ -32,8 +32,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from arcagent.core.capability_loader import CapabilityLoader
-from arcagent.core.capability_registry import CapabilityRegistry
+from arcagent.capabilities.capability_loader import CapabilityLoader
+from arcagent.capabilities.capability_registry import CapabilityRegistry
 from arcagent.modules.ui_reporter import _runtime
 
 _ALL_SUBSCRIBED_EVENTS = (

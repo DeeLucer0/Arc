@@ -24,7 +24,7 @@ def main() -> int:
     if not folder.is_dir():
         print(f"not a folder: {folder}")
         return 2
-    from arcagent.core.skill_validator import validate_skill_folder
+    from arcagent.capabilities.skill_validator import validate_skill_folder
 
     result = validate_skill_folder(folder, scan_root="workspace")
     for err in result.errors:

@@ -57,7 +57,7 @@ async def _noop(**_: object) -> str:
 @pytest.mark.asyncio
 class TestRegisterTool:
     async def test_register_then_get(self) -> None:
-        from arcagent.core.capability_registry import (
+        from arcagent.capabilities.capability_registry import (
             CapabilityRegistry,
             ToolEntry,
         )
@@ -76,7 +76,7 @@ class TestRegisterTool:
         assert got is entry
 
     async def test_register_replace_emits_replaced(self) -> None:
-        from arcagent.core.capability_registry import (
+        from arcagent.capabilities.capability_registry import (
             CapabilityRegistry,
             ToolEntry,
         )
@@ -104,7 +104,7 @@ class TestRegisterTool:
 @pytest.mark.asyncio
 class TestRegisterHook:
     async def test_hooks_fan_out_priority_ordered(self) -> None:
-        from arcagent.core.capability_registry import (
+        from arcagent.capabilities.capability_registry import (
             CapabilityRegistry,
             HookEntry,
         )
@@ -157,7 +157,7 @@ class TestRegisterHook:
 
     async def test_register_two_hooks_same_event_both_kept(self) -> None:
         """Hooks fan out — last-wins does NOT apply (R-004)."""
-        from arcagent.core.capability_registry import (
+        from arcagent.capabilities.capability_registry import (
             CapabilityRegistry,
             HookEntry,
         )
@@ -195,7 +195,7 @@ class TestRegisterHook:
 class TestRegisterBackgroundTask:
     async def test_replace_drains_old_task(self) -> None:
         """R-062 — register a new task with same name cancels the old."""
-        from arcagent.core.capability_registry import (
+        from arcagent.capabilities.capability_registry import (
             BackgroundTaskEntry,
             CapabilityRegistry,
         )
@@ -243,7 +243,7 @@ class TestRegisterBackgroundTask:
 class TestRegisterCapabilityClass:
     async def test_capability_class_setup_not_run_at_register(self) -> None:
         """Registry only stores; loader (1.6) calls setup. R-060."""
-        from arcagent.core.capability_registry import (
+        from arcagent.capabilities.capability_registry import (
             CapabilityRegistry,
             LifecycleEntry,
         )
@@ -274,7 +274,7 @@ class TestRegisterCapabilityClass:
 @pytest.mark.asyncio
 class TestSkillRegistration:
     async def test_skill_round_trip(self) -> None:
-        from arcagent.core.capability_registry import (
+        from arcagent.capabilities.capability_registry import (
             CapabilityRegistry,
             SkillEntry,
         )
@@ -297,7 +297,7 @@ class TestSkillRegistration:
 @pytest.mark.asyncio
 class TestPromptManifestCache:
     async def test_manifest_xml_shape(self) -> None:
-        from arcagent.core.capability_registry import (
+        from arcagent.capabilities.capability_registry import (
             CapabilityRegistry,
             SkillEntry,
             ToolEntry,
@@ -343,7 +343,7 @@ class TestPromptManifestCache:
         assert skill_el.attrib["version"] == "1.0.0"
 
     async def test_manifest_cached_until_mutation(self) -> None:
-        from arcagent.core.capability_registry import (
+        from arcagent.capabilities.capability_registry import (
             CapabilityRegistry,
             ToolEntry,
         )
@@ -378,7 +378,7 @@ class TestArcrunTools:
     async def test_to_arcrun_tools_returns_arcrun_tool(self) -> None:
         from arcrun.types import Tool as ArcRunTool
 
-        from arcagent.core.capability_registry import (
+        from arcagent.capabilities.capability_registry import (
             CapabilityRegistry,
             ToolEntry,
         )
@@ -399,7 +399,7 @@ class TestArcrunTools:
         assert tools[0].parallel_safe is True  # read_only → parallel-safe
 
     async def test_state_modifying_is_not_parallel_safe(self) -> None:
-        from arcagent.core.capability_registry import (
+        from arcagent.capabilities.capability_registry import (
             CapabilityRegistry,
             ToolEntry,
         )
@@ -420,7 +420,7 @@ class TestArcrunTools:
 @pytest.mark.asyncio
 class TestUnregister:
     async def test_unregister_removes_tool(self) -> None:
-        from arcagent.core.capability_registry import (
+        from arcagent.capabilities.capability_registry import (
             CapabilityRegistry,
             ToolEntry,
         )
@@ -438,7 +438,7 @@ class TestUnregister:
         assert (await reg.get_tool("x")) is None
 
     async def test_unregister_unknown_no_op(self) -> None:
-        from arcagent.core.capability_registry import CapabilityRegistry
+        from arcagent.capabilities.capability_registry import CapabilityRegistry
 
         reg = CapabilityRegistry()
         await reg.unregister("tool", "nope")  # must not raise
@@ -448,7 +448,7 @@ class TestUnregister:
 class TestLockSemantics:
     async def test_concurrent_reads(self) -> None:
         """Multiple readers proceed concurrently."""
-        from arcagent.core.capability_registry import (
+        from arcagent.capabilities.capability_registry import (
             CapabilityRegistry,
             ToolEntry,
         )
@@ -473,7 +473,7 @@ class TestLockSemantics:
     async def test_writer_excludes_readers(self) -> None:
         """Writer holds an exclusive lock — concurrent reader sees the
         post-write state, never half-mutated."""
-        from arcagent.core.capability_registry import (
+        from arcagent.capabilities.capability_registry import (
             CapabilityRegistry,
             ToolEntry,
         )
@@ -508,7 +508,7 @@ class TestLockSemantics:
 @pytest.mark.asyncio
 class TestEventEmission:
     async def test_capability_added_event_fires(self) -> None:
-        from arcagent.core.capability_registry import (
+        from arcagent.capabilities.capability_registry import (
             CapabilityRegistry,
             ToolEntry,
         )
@@ -536,7 +536,7 @@ class TestEventEmission:
         assert "capability:added" in events
 
     async def test_capability_replaced_event_fires(self) -> None:
-        from arcagent.core.capability_registry import (
+        from arcagent.capabilities.capability_registry import (
             CapabilityRegistry,
             ToolEntry,
         )
@@ -571,7 +571,7 @@ class TestEventEmission:
         assert "capability:replaced" in events
 
     async def test_capability_removed_event_fires(self) -> None:
-        from arcagent.core.capability_registry import (
+        from arcagent.capabilities.capability_registry import (
             CapabilityRegistry,
             ToolEntry,
         )

@@ -13,8 +13,8 @@ from pathlib import Path
 import pytest
 
 from arcagent.builtins.capabilities import _runtime
-from arcagent.core.capability_loader import CapabilityLoader
-from arcagent.core.capability_registry import CapabilityRegistry
+from arcagent.capabilities.capability_loader import CapabilityLoader
+from arcagent.capabilities.capability_registry import CapabilityRegistry
 
 
 @pytest.fixture(autouse=True)

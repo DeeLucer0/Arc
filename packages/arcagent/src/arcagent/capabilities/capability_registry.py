@@ -45,7 +45,7 @@ from arcagent.tools._decorator import (
     ToolMetadata,
 )
 
-_logger = logging.getLogger("arcagent.core.capability_registry")
+_logger = logging.getLogger("arcagent.capabilities.capability_registry")
 
 Kind = Literal["tool", "skill", "hook", "background_task", "capability"]
 
