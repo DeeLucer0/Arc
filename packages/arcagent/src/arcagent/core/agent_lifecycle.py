@@ -207,6 +207,10 @@ async def bridge_capability_tools_to_registry(agent: ArcAgent) -> None:
             transport=ToolTransport.NATIVE,
             execute=entry.execute,
             source=str(entry.source_path),
+            classification=entry.meta.classification,
+            capability_tags=list(entry.meta.capability_tags),
+            when_to_use=entry.meta.when_to_use,
+            signals_completion=entry.meta.signals_completion,
         )
         tool_registry.register(registered)
         agent._capability_tool_names.add(entry.meta.name)

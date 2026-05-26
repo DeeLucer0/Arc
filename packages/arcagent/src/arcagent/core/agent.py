@@ -38,6 +38,7 @@ from typing import Any
 from arcllm import Message
 from arctrust import AgentIdentity
 
+from arcagent.capabilities.capability_registry import SkillEntry
 from arcagent.core.agent_dispatch import (
     chat_stream as _dispatch_chat_stream,
 )
@@ -53,7 +54,6 @@ from arcagent.core.agent_handle import (
     _validate_steering_message,
 )
 from arcagent.core.agent_lifecycle import setup_capabilities
-from arcagent.capabilities.capability_registry import SkillEntry
 from arcagent.core.config import ArcAgentConfig
 from arcagent.core.model_manager import (
     create_arcllm_bridge,
@@ -265,7 +265,13 @@ class ArcAgent:
         """Execute a task, returning a handle for steering/cancellation."""
         return await execute_loop_async(self, task, tool_choice=tool_choice)
 
-    async def chat(self, message: str, *, session_id: str | None = None) -> Any:
+    async def chat(
+        self,
+        message: str,
+        *,
+        session_id: str | None = None,
+        tool_choice: dict[str, Any] | None = None,
+    ) -> Any:
         """Multi-turn conversation with persistent message history."""
         session = await prepare_chat_session(self, message, session_id)
 
@@ -273,6 +279,7 @@ class ArcAgent:
             self,
             message,
             messages=[Message(**m) for m in session.get_messages()],
+            tool_choice=tool_choice,
         )
 
         response_text = getattr(result, "content", None) or ""
@@ -282,7 +289,13 @@ class ArcAgent:
         await maybe_compact(self, session)
         return result
 
-    async def chat_async(self, message: str, *, session_id: str | None = None) -> AgentHandle:
+    async def chat_async(
+        self,
+        message: str,
+        *,
+        session_id: str | None = None,
+        tool_choice: dict[str, Any] | None = None,
+    ) -> AgentHandle:
         """Multi-turn conversation returning a steerable handle.
 
         Unlike chat(), result() automatically commits the assistant
@@ -294,6 +307,7 @@ class ArcAgent:
             self,
             message,
             messages=[Message(**m) for m in session.get_messages()],
+            tool_choice=tool_choice,
             session=session,
         )
 

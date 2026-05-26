@@ -48,6 +48,7 @@ class ToolMetadata:
     version: str = "1.0.0"
     examples: tuple[str, ...] = ()
     model_hint: str | None = None
+    signals_completion: bool = False
     kind: Literal["tool"] = "tool"
 
 
@@ -112,6 +113,7 @@ def tool(
     version: str = "1.0.0",
     examples: Iterable[str] | None = None,
     model_hint: str | None = None,
+    signals_completion: bool = False,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Stamp tool metadata on an async function.
 
@@ -127,6 +129,8 @@ def tool(
       * ``version``        — semver string for diff/replace tracking
       * ``examples``       — sample invocation strings
       * ``model_hint``     — preferred model size if any
+      * ``signals_completion`` — when True, invocation ends the ReAct
+        turn and arguments become the loop's completion payload (R-030)
 
     Usage::
 
@@ -151,6 +155,7 @@ def tool(
             version=version,
             examples=tuple(examples or ()),
             model_hint=model_hint,
+            signals_completion=signals_completion,
         )
         # Stash on the original function so call semantics are
         # unchanged. The opaque underscore-prefixed name avoids
