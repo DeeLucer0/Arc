@@ -7,13 +7,13 @@ direct ``arc llm`` call and a later ``arc agent serve`` land in the same store.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 from arcstore import ArcStoreConfig, resolve_data_dir
+from arcstore.config import ENV_DATA_DIR
 
 
 def test_arcstore_config_block_defaults() -> None:
@@ -86,4 +86,4 @@ def test_disabled_short_circuits() -> None:
 
 def test_env_var_name_is_stable() -> None:
     """Guard the documented env var so the shared contract can't drift."""
-    assert "ARCSTORE_DATA_DIR" in os.environ or True  # presence optional
+    assert ENV_DATA_DIR == "ARCSTORE_DATA_DIR"
