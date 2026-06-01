@@ -53,6 +53,8 @@ import sys
 import uuid
 from pathlib import Path
 
+from arcrun import collect
+
 _logger = logging.getLogger("arc.agent.worker")
 
 # Config search locations for arc-agent-worker (same order as the arc CLI).
@@ -135,10 +137,10 @@ async def _run_with_arcagent(
         agent = ArcAgent(config, config_path=config_path)
         await agent.startup()
 
-        result = await agent.run(message)
-
-        # Extract text from ArcRun result object (has .content attribute).
-        content: str = getattr(result, "content", None) or str(result)
+        # One streaming entry, collected to a result, on the event's session.
+        session = await agent.session(session_key)
+        result = await collect(agent.run(message, session=session))
+        content: str = result.content or ""
 
         _logger.info(
             "arc-agent-worker: agent run complete session=%s content_len=%d",

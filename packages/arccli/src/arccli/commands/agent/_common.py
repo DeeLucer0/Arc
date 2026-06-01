@@ -434,24 +434,12 @@ def _load_arcagent(agent_dir: Path) -> tuple[Any, Any, Path]:
 
 
 def _print_result_json(result: Any) -> None:
-    """Serialize a LoopResult to JSON and write to stdout."""
+    """Serialize a ``RunResult`` (from ``collect``) to JSON and write to stdout."""
     data = {
         "content": result.content,
-        "completion_payload": result.completion_payload,
         "turns": result.turns,
         "tool_calls_made": result.tool_calls_made,
-        "tokens_used": result.tokens_used,
-        "strategy_used": result.strategy_used,
         "cost_usd": result.cost_usd,
-        "event_count": len(result.events),
-        "events": [
-            {
-                "type": e.type,
-                "timestamp": e.timestamp,
-                "data": e.data,
-            }
-            for e in result.events
-        ],
     }
     sys.stdout.write(json.dumps(data, indent=2) + "\n")
 
