@@ -124,6 +124,25 @@ class SessionManager:
         )
         return list(self._messages)
 
+    async def open_or_resume(self, key: str) -> list[dict[str, Any]]:
+        """Bind this manager to ``key``, resuming history if it exists.
+
+        Deterministic by key: a returning conversation (same channel, same CLI
+        key) reloads its prior messages; a first-seen key starts an empty,
+        persisted session. This is how sessionless surfaces (CLI, scheduler) and
+        channel surfaces alike get a stable session from the agent's pool.
+        """
+        self._sessions_dir.mkdir(parents=True, exist_ok=True)
+        jsonl_path = self._sessions_dir / f"{key}.jsonl"
+        if jsonl_path.exists():
+            return await self.resume_session(key)
+        self._session_id = key
+        self._jsonl_path = jsonl_path
+        self._jsonl_path.touch()
+        self._messages = []
+        _logger.info("Opened session: %s", key)
+        return []
+
     async def append_message(self, message: dict[str, Any]) -> None:
         """Thread-safe append to message list and JSONL file.
 

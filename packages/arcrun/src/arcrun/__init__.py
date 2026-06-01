@@ -16,11 +16,13 @@ from arcrun.prompts import get_strategy_prompts
 from arcrun.registry import ToolRegistry
 from arcrun.strategies import Strategy
 from arcrun.streams import (
+    RunResult,
     StreamEvent,
     TokenEvent,
     ToolEndEvent,
     ToolStartEvent,
     TurnEndEvent,
+    collect,
     run_stream,
     stream_llm_response,
 )
@@ -33,6 +35,7 @@ __all__ = [
     "EventBus",
     "LoopResult",
     "RunHandle",
+    "RunResult",
     "SandboxConfig",
     "SandboxError",
     "SandboxOOMError",
@@ -49,6 +52,7 @@ __all__ = [
     "ToolStartEvent",
     "TurnEndEvent",
     "__version__",
+    "collect",
     "get_strategy_prompts",
     "make_execute_tool",
     "run",
