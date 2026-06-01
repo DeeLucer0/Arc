@@ -18,13 +18,13 @@
 
 | # | Task | Module | Pillar | Test | Done |
 |---|---|---|---|---|---|
-| 1.1 | Failing test: `SpoolRecord(kind="tool_event", …)` validates new flat fields (tool_name/phase/args_digest/result_digest/sizes) + auto ts | `arcstore` | S | `tests/unit/test_records.py::test_tool_event_fields` | [ ] |
-| 1.2 | Failing test: `SpoolRecord(kind="spawn_event", …)` validates parent_did/child_did/role/depth | `arcstore` | S | `tests/unit/test_records.py::test_spawn_event_fields` | [ ] |
-| 1.3 | Add `tool_event`,`spawn_event` to `SpoolKind` + fields to `SpoolRecord` | `arcstore` | S | 1.1, 1.2 pass | [ ] |
-| 1.4 | Failing test: `table_for_kind` maps the two new kinds; `OPERATIONAL_TABLES` includes them | `arcstore` | M | `tests/unit/test_backend_protocol.py::test_new_kinds_mapped` | [ ] |
-| 1.5 | Add tables to `_KIND_TABLE`/`OPERATIONAL_TABLES` + `SqliteBackend` schema (flat cols, INSERT OR IGNORE) | `arcstore` | S | 1.4 passes | [ ] |
-| 1.6 | Failing test: ingest round-trips a `tool_event` + `spawn_event` from spool → query (idempotent on replay) | `arcstore` | S, Sec | `tests/integration/test_ingest.py::test_tool_and_spawn_ingest` | [ ] |
-| 1.7 | Verify FakeBackend still conforms (no schema change needed) | `arcstore` | M | existing `test_backend_protocol` green | [ ] |
+| 1.1 | Failing test: `SpoolRecord(kind="tool_event", …)` validates new flat fields (tool_name/phase/args_digest/result_digest/sizes) + auto ts | `arcstore` | S | `tests/unit/test_records.py::test_tool_event_fields` | [x] |
+| 1.2 | Failing test: `SpoolRecord(kind="spawn_event", …)` validates parent_did/child_did/role/depth | `arcstore` | S | `tests/unit/test_records.py::test_spawn_event_fields` | [x] |
+| 1.3 | Add `tool_event`,`spawn_event` to `SpoolKind` + fields to `SpoolRecord` | `arcstore` | S | 1.1, 1.2 pass | [x] |
+| 1.4 | Failing test: `table_for_kind` maps the two new kinds; `OPERATIONAL_TABLES` includes them | `arcstore` | M | `tests/unit/test_backend_protocol.py::test_new_kinds_mapped` | [x] |
+| 1.5 | Add tables to `_KIND_TABLE`/`OPERATIONAL_TABLES` + `SqliteBackend` schema (flat cols, INSERT OR IGNORE) | `arcstore` | S | 1.4 passes | [x] |
+| 1.6 | Failing test: ingest round-trips a `tool_event` + `spawn_event` from spool → query (idempotent on replay) | `arcstore` | S, Sec | `tests/integration/test_ingest.py::test_tool_and_spawn_ingest` | [x] |
+| 1.7 | Verify FakeBackend still conforms (no schema change needed) | `arcstore` | M | existing `test_backend_protocol` green | [x] |
 
 **Phase 1 acceptance:** new kinds validate, map, ingest idempotently; ruff + mypy --strict clean.
 
