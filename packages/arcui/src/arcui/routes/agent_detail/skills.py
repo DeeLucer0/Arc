@@ -90,13 +90,23 @@ async def get_skills(request: Request) -> JSONResponse:
             ErrorResponse(error="Agent not found").model_dump(mode="json"),
             status_code=404,
         )
+    return JSONResponse(
+        SkillsResponse(skills=discover_skills(agent_id, agent_root)).model_dump(mode="json")
+    )
 
-    # Pull skills from every standard location the agent could have them:
-    #   - team/<agent>/workspace/skills/      (agent-authored runtime skills)
-    #   - team/<agent>/skills/                (agent-shipped skills)
-    #   - ~/.arcagent/skills/                 (user-global skills shared
-    #                                          across agents, if directory
-    #                                          exists)
+
+def discover_skills(agent_id: str, agent_root: Path) -> list[dict[str, Any]]:
+    """Collect an agent's skills from every standard on-disk location.
+
+    Shared by the agent-detail Skills tab and the fleet Tools & Skills page so
+    both surface the same set:
+      - team/<agent>/workspace/skills/        (legacy runtime skills)
+      - team/<agent>/skills/                  (legacy agent-shipped skills)
+      - team/<agent>/capabilities/<name>/     (agent-shipped capabilities)
+      - team/<agent>/workspace/.capabilities/ (agent-authored capabilities)
+      - ~/.arcagent/skills/                   (user-global, if present)
+      - arcagent builtins                     (create-skill, update-tool, ...)
+    """
     skills: list[dict[str, Any]] = []
     seen: set[str] = set()
 
@@ -112,6 +122,15 @@ async def get_skills(request: Request) -> JSONResponse:
         _merge(_scan_skills_dir(agent_id, workspace, "skills", "workspace"))
     if (agent_root / "skills").is_dir():
         _merge(_scan_skills_dir(agent_id, agent_root, "skills", "agent_dir"))
+    # Agent-shipped capabilities (trusted): team/<agent>/capabilities/<name>/SKILL.md.
+    # Skills live directly under capabilities/, alongside @tool .py files (which
+    # the .md filter skips).
+    if (agent_root / "capabilities").is_dir():
+        _merge(_scan_skills_dir(agent_id, agent_root / "capabilities", "", "agent_dir"))
+    # Agent-authored capabilities (untrusted): workspace/.capabilities/<name>/SKILL.md.
+    # fs_reader skips dot-children, so the hidden dir must be the scan root itself.
+    if (workspace / ".capabilities").is_dir():
+        _merge(_scan_skills_dir(agent_id, workspace / ".capabilities", "", "workspace"))
     # Global skills dir (set by [extensions].global_dir/.. or convention)
     global_skills = Path.home() / ".arcagent" / "skills"
     if global_skills.is_dir():
@@ -136,7 +155,7 @@ async def get_skills(request: Request) -> JSONResponse:
     except Exception:  # reason: fail-open — log + continue
         logger.debug("builtin skills scan failed", exc_info=True)
 
-    return JSONResponse(SkillsResponse(skills=skills).model_dump(mode="json"))
+    return skills
 
 
 def _parse_skill(rel_path: str, text: str) -> dict[str, Any]:

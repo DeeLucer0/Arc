@@ -51,10 +51,13 @@ export interface Agent {
 
 export interface PolicyBullet {
   [key: string]: unknown
+  id?: string
   text?: string
   score?: number
   uses?: number
+  reviewed?: string
   created?: string
+  source?: string
   retired?: boolean
   agent_id?: string
 }

@@ -14,6 +14,7 @@ working unchanged.
 from __future__ import annotations
 
 import asyncio
+import datetime
 import importlib
 import importlib.util
 import json
@@ -52,13 +53,28 @@ You are a helpful assistant with access to tools and a structured workspace.
 3. **Show your work** - Report what tools you used and what they returned
 """
 
-_DEFAULT_POLICY = """\
-# Policy
+_SEED_POLICY_BULLETS = (
+    "Be helpful and direct",
+    "Use tools when appropriate",
+    "Report errors clearly",
+)
 
-- [P01] Be helpful and direct
-- [P02] Use tools when appropriate
-- [P03] Report errors clearly
-"""
+
+def _default_policy() -> str:
+    """Seed ``policy.md`` with structured ACE bullets.
+
+    Each line carries the ``{score, uses, reviewed, created, source}`` trailer
+    the policy engine expects, so the curator can score/update them and the UI
+    can parse them. A bullet without that metadata is invisible to both.
+    """
+    today = datetime.date.today().isoformat()
+    lines = ["# Policy", ""]
+    for i, text in enumerate(_SEED_POLICY_BULLETS, start=1):
+        lines.append(
+            f"- [P{i:02d}] {text} "
+            f"{{score:5, uses:0, reviewed:{today}, created:{today}, source:init}}"
+        )
+    return "\n".join(lines) + "\n"
 
 _DEFAULT_CONTEXT = """\
 # Context
@@ -289,7 +305,7 @@ def _scaffold_workspace(agent_dir: Path, name: str) -> None:
 
     policy_path = workspace / "policy.md"
     if not policy_path.exists():
-        policy_path.write_text(_DEFAULT_POLICY)
+        policy_path.write_text(_default_policy())
 
     context_path = workspace / "context.md"
     if not context_path.exists():
@@ -450,10 +466,10 @@ __all__ = [
     "_DEFAULT_CONFIG",
     "_DEFAULT_CONTEXT",
     "_DEFAULT_IDENTITY",
-    "_DEFAULT_POLICY",
     "_ENV_PATHS",
     "_GLOBAL_CAP_DIR",
     "_capability_scan_roots",
+    "_default_policy",
     "_discover_tools",
     "_iter_capability_files",
     "_iter_skill_folders",

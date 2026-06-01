@@ -81,3 +81,28 @@ class TestSqliteBackend:
             assert len(await be2.query("llm_calls")) == 1
         finally:
             await be2.stop()
+
+    async def test_start_reconciles_columns_on_legacy_schema(self, tmp_path: Path) -> None:
+        """A DB created by an earlier (pre-SPEC-028) schema is missing the
+        tool/spawn columns; ``start()`` must ALTER them in so queries that list
+        every allowlisted column don't fail with ``no such column``."""
+        db = tmp_path / "legacy.db"
+        # Simulate an old DB: llm_calls without the SPEC-028 columns.
+        conn = sqlite3.connect(str(db))
+        conn.executescript(
+            "CREATE TABLE llm_calls(record_id TEXT PRIMARY KEY, kind TEXT, "
+            "agent_label TEXT, ts TEXT, prompt_tokens INTEGER, extra TEXT);"
+        )
+        conn.commit()
+        conn.close()
+
+        be = SqliteBackend(db)
+        await be.start()
+        try:
+            cols = {r[1] for r in sqlite3.connect(str(db)).execute("PRAGMA table_info(llm_calls)")}
+            assert "tool_name" in cols
+            assert "parent_did" in cols
+            # The full-column SELECT that used to raise now succeeds.
+            assert await be.query("llm_calls") == []
+        finally:
+            await be.stop()

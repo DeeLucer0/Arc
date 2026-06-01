@@ -71,6 +71,19 @@ _AUDIT_COLUMNS = (
 _JSON_COLUMNS = frozenset({"extra"})
 # Columns stored as INTEGER but exposed as bool.
 _BOOL_COLUMNS = frozenset({"verified"})
+# SQLite affinities for ALTER TABLE reconciliation (TEXT is the default).
+_INTEGER_COLUMNS = frozenset(
+    {"prompt_tokens", "completion_tokens", "args_size", "result_size", "depth", "seq", "verified"}
+)
+_REAL_COLUMNS = frozenset({"cost_usd", "latency_ms"})
+
+
+def _column_sql_type(col: str) -> str:
+    if col in _INTEGER_COLUMNS:
+        return "INTEGER"
+    if col in _REAL_COLUMNS:
+        return "REAL"
+    return "TEXT"
 
 _TABLE_COLUMNS: dict[str, tuple[str, ...]] = {
     **{t: _OPERATIONAL_COLUMNS for t in OPERATIONAL_TABLES},
@@ -195,9 +208,28 @@ class SqliteBackend:
         conn = self._connect()
         try:
             conn.executescript(_SCHEMA_SQL)
+            self._reconcile_columns(conn)
             conn.commit()
         finally:
             conn.close()
+
+    def _reconcile_columns(self, conn: sqlite3.Connection) -> None:
+        """Add any allowlisted column missing from a pre-existing table.
+
+        ``CREATE TABLE IF NOT EXISTS`` never alters an existing table, so a DB
+        created by an earlier schema (e.g. before the SPEC-028 tool/spawn
+        columns) lacks the new columns and every SELECT listing them fails with
+        ``no such column``. Forward-only ``ALTER TABLE ADD COLUMN`` keeps the
+        derived store self-healing without dropping data. Table and column names
+        are allowlisted constants — no injection vector.
+        """
+        for table, columns in _TABLE_COLUMNS.items():
+            existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+            for col in columns:
+                if col not in existing:
+                    conn.execute(
+                        f"ALTER TABLE {table} ADD COLUMN {col} {_column_sql_type(col)}"
+                    )
 
     def _write_batch(
         self, table: str, columns: tuple[str, ...], tuples: list[tuple[Any, ...]]

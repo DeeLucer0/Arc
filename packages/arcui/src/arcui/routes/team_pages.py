@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from collections import deque
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,6 +31,8 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from arcui.query_validators import safe_int
+from arcui.routes.agent_detail.skills import discover_skills
+from arcui.routes.agent_detail.tools import _BUILTIN_TOOLS
 from arcui.schemas import (
     AuditEventsResponse,
     PolicyBulletsResponse,
@@ -43,7 +44,11 @@ from arcui.schemas import (
 logger = logging.getLogger(__name__)
 
 _CALLER_DID = "did:arc:ui:viewer"
-_FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+
+# Effect classification for the built-in tool surface, so the fleet matrix can
+# show read-only / write / external without a per-agent scan. Agent- and
+# module-supplied tools surface full classification on the agent Tools tab.
+_BUILTIN_CLASS: dict[str, str] = {name: cls for name, cls, _desc in _BUILTIN_TOOLS}
 
 # Default path for the per-agent connect-state file written by arc-stack.sh.
 _AGENT_STATE_FILE = Path.home() / ".arcagent" / "agent-state.json"
@@ -300,7 +305,10 @@ async def get_tools_skills(request: Request) -> JSONResponse:
         if live is None:
             continue
         for tool in live.registration.tools:
-            existing = tools_by_name.setdefault(tool, {"name": tool, "agents": []})
+            existing = tools_by_name.setdefault(
+                tool,
+                {"name": tool, "agents": [], "classification": _BUILTIN_CLASS.get(tool, "")},
+            )
             if entry.agent_id not in existing["agents"]:
                 existing["agents"].append(entry.agent_id)
 
@@ -313,52 +321,13 @@ async def get_tools_skills(request: Request) -> JSONResponse:
 
 
 def _read_agent_skills(entry: Any) -> list[dict[str, Any]]:
-    workspace = Path(entry.workspace_path) / "workspace"
-    try:
-        listing = fs_reader.list_tree(
-            scope="agent",
-            agent_id=entry.agent_id,
-            agent_root=workspace,
-            rel_path="skills",
-            caller_did=_CALLER_DID,
-            max_depth=1,
-        )
-    except PathTraversalError:
-        return []
-
-    skills: list[dict[str, Any]] = []
-    for item in listing:
-        if item.type != "file" or not item.path.endswith(".md"):
-            continue
-        try:
-            content = fs_reader.read_file(
-                scope="agent",
-                agent_id=entry.agent_id,
-                agent_root=workspace,
-                rel_path=item.path,
-                caller_did=_CALLER_DID,
-            )
-        except (FileNotFoundError, PathTraversalError, FileTooLargeError):
-            continue
-        skills.append(_parse_skill_frontmatter(item.path, content.content))
-    return skills
-
-
-def _parse_skill_frontmatter(rel_path: str, text: str) -> dict[str, Any]:
-    base = rel_path.rsplit("/", 1)[-1].removesuffix(".md")
-    fm: dict[str, str] = {}
-    match = _FRONTMATTER_RE.match(text)
-    if match:
-        for line in match.group(1).splitlines():
-            if ":" in line:
-                key, _, value = line.partition(":")
-                fm[key.strip()] = value.strip()
-    return {
-        "name": fm.get("name", base),
-        "description": fm.get("description", ""),
-        "version": fm.get("version", ""),
-        "path": rel_path,
-    }
+    # Reuse the agent-detail discovery so the fleet list and the per-agent tab
+    # surface the same skills (workspace + capabilities + builtins). The full
+    # body is dropped here — the detail drawer fetches it per-agent on click.
+    rows = discover_skills(entry.agent_id, Path(entry.workspace_path))
+    for row in rows:
+        row.pop("body", None)
+    return rows
 
 
 # ---------------------------------------------------------------------------

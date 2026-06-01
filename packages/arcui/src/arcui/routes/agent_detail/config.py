@@ -109,12 +109,19 @@ async def get_files_tree(request: Request) -> JSONResponse:
         return err
 
     base = _resolve_root_path(agent_root, root_arg)
+    # Lazy, one level at a time: the tree UI fetches each directory's immediate
+    # children via ``?path=`` as folders are expanded. ``max_depth=0`` lists only
+    # the direct children (no grandchildren) so each entry renders exactly once —
+    # max_depth=1 returned two levels and the UI drew grandchildren as siblings.
+    # ``rel_path`` is traversal-validated in list_tree.
+    rel = request.query_params.get("path", "")
     try:
         entries = fs_reader.list_tree(
             scope="agent",
             agent_id=agent_id,
             agent_root=base,
-            rel_path="",
+            rel_path=rel,
+            max_depth=0,
             caller_did=_CALLER_DID,
         )
     except PathTraversalError as exc:

@@ -16,28 +16,32 @@ function baseName(path: string): string {
 
 function TreeLevel({
   agentId,
+  root,
   path,
   depth,
   selected,
   onSelect,
 }: {
   agentId: string
+  root: string
   path: string
   depth: number
   selected: string | null
   onSelect: (path: string) => void
 }) {
   const q = useQuery<FilesTreeResponse>({
-    queryKey: ['agent', agentId, 'files', path],
+    queryKey: ['agent', agentId, 'files', root, path],
     queryFn: ({ signal }) =>
       apiGet(
-        `/api/agents/${agentId}/files/tree${path ? `?path=${encodeURIComponent(path)}` : ''}`,
+        `/api/agents/${agentId}/files/tree?root=${root}${path ? `&path=${encodeURIComponent(path)}` : ''}`,
         signal,
       ),
   })
 
   if (q.isLoading) return <div className="py-1 pl-2 text-xs text-muted-foreground">Loading…</div>
   if (q.isError || !q.data) return null
+  if (q.data.entries.length === 0)
+    return <div className="py-1 pl-2 text-xs text-muted-foreground">empty</div>
 
   return (
     <ul>
@@ -45,6 +49,7 @@ function TreeLevel({
         <TreeNode
           key={entry.path}
           agentId={agentId}
+          root={root}
           entry={entry}
           depth={depth}
           selected={selected}
@@ -57,12 +62,14 @@ function TreeLevel({
 
 function TreeNode({
   agentId,
+  root,
   entry,
   depth,
   selected,
   onSelect,
 }: {
   agentId: string
+  root: string
   entry: FilesTreeEntry
   depth: number
   selected: string | null
@@ -80,7 +87,7 @@ function TreeNode({
           type="button"
           style={pad}
           onClick={() => setOpen((o) => !o)}
-          className="flex w-full items-center gap-1.5 rounded py-1 pr-2 text-left text-sm text-foreground hover:bg-muted/50"
+          className="flex w-full cursor-pointer items-center gap-1.5 rounded py-1 pr-2 text-left text-sm text-foreground hover:bg-muted/50"
         >
           <ChevronRight className={cn('size-3.5 shrink-0 transition-transform', open && 'rotate-90')} />
           {open ? (
@@ -93,6 +100,7 @@ function TreeNode({
         {open && (
           <TreeLevel
             agentId={agentId}
+            root={root}
             path={entry.path}
             depth={depth + 1}
             selected={selected}
@@ -110,7 +118,7 @@ function TreeNode({
         style={pad}
         onClick={() => onSelect(entry.path)}
         className={cn(
-          'flex w-full items-center gap-1.5 rounded py-1 pr-2 text-left text-sm hover:bg-muted/50',
+          'flex w-full cursor-pointer items-center gap-1.5 rounded py-1 pr-2 text-left text-sm hover:bg-muted/50',
           selected === entry.path ? 'bg-primary/10 text-foreground' : 'text-muted-foreground',
         )}
       >
@@ -122,11 +130,11 @@ function TreeNode({
   )
 }
 
-function FileViewer({ agentId, path }: { agentId: string; path: string }) {
+function FileViewer({ agentId, root, path }: { agentId: string; root: string; path: string }) {
   const q = useQuery<FileReadResponse>({
-    queryKey: ['agent', agentId, 'file', path],
+    queryKey: ['agent', agentId, 'file', root, path],
     queryFn: ({ signal }) =>
-      apiGet(`/api/agents/${agentId}/files/read?path=${encodeURIComponent(path)}`, signal),
+      apiGet(`/api/agents/${agentId}/files/read?root=${root}&path=${encodeURIComponent(path)}`, signal),
   })
 
   if (q.isLoading) return <LoadingRows rows={8} />
@@ -151,20 +159,30 @@ function FileViewer({ agentId, path }: { agentId: string; path: string }) {
   )
 }
 
-/** Two-pane workspace browser: lazy tree (left) + file viewer (right). */
-export function FileTree({ agentId, rootLabel = 'workspace' }: { agentId: string; rootLabel?: string }) {
+/** Two-pane file browser: lazy tree (left) + file viewer (right).
+ *  `root` selects the agent's `workspace` subdir or full `agent` root. */
+export function FileTree({
+  agentId,
+  root = 'workspace',
+  rootLabel,
+}: {
+  agentId: string
+  root?: 'workspace' | 'agent'
+  rootLabel?: string
+}) {
   const [selected, setSelected] = useState<string | null>(null)
+  // Reset selection when switching roots so the viewer never shows a stale file.
   return (
     <div className="grid h-[460px] grid-cols-[minmax(220px,300px)_1fr] overflow-hidden rounded-xl border border-border bg-card">
       <div className="overflow-auto border-r border-border p-2">
         <div className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          {rootLabel}
+          {rootLabel ?? root}
         </div>
-        <TreeLevel agentId={agentId} path="" depth={0} selected={selected} onSelect={setSelected} />
+        <TreeLevel agentId={agentId} root={root} path="" depth={0} selected={selected} onSelect={setSelected} />
       </div>
       <div className="overflow-hidden">
         {selected ? (
-          <FileViewer agentId={agentId} path={selected} />
+          <FileViewer agentId={agentId} root={root} path={selected} />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             Select a file to view

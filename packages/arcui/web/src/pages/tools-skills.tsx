@@ -5,17 +5,16 @@ import { PageHeader } from '@/components/page-header'
 import { DataTable } from '@/components/data-table'
 import { StatCard } from '@/components/stat-card'
 import { QueryState, EmptyState } from '@/components/states'
+import { SkillsBrowser } from '@/components/skills-browser'
+import { ClassificationBadge } from '@/components/tools-table'
 import { useTeamToolsSkills } from '@/lib/queries'
+import type { SkillRef } from '@/components/skill-drawer'
 import type { Dict } from '@/lib/types'
 
 interface ToolRow extends Dict {
   name?: string
   agents?: string[]
-}
-interface SkillRow extends Dict {
-  name?: string
-  description?: string
-  agent_id?: string
+  classification?: string
 }
 
 const toolColumns: ColumnDef<ToolRow, unknown>[] = [
@@ -23,6 +22,11 @@ const toolColumns: ColumnDef<ToolRow, unknown>[] = [
     accessorKey: 'name',
     header: 'Tool',
     cell: (c) => <span className="font-mono text-xs text-foreground">{String(c.getValue() ?? '—')}</span>,
+  },
+  {
+    accessorKey: 'classification',
+    header: 'Classification',
+    cell: (c) => <ClassificationBadge value={c.getValue() as string} />,
   },
   {
     id: 'count',
@@ -51,7 +55,7 @@ const toolColumns: ColumnDef<ToolRow, unknown>[] = [
 export function ToolsSkillsPage() {
   const query = useTeamToolsSkills()
   const tools = useMemo(() => (query.data?.tools ?? []) as ToolRow[], [query.data])
-  const skills = useMemo(() => (query.data?.skills ?? []) as SkillRow[], [query.data])
+  const skills = useMemo(() => (query.data?.skills ?? []) as SkillRef[], [query.data])
 
   return (
     <div className="flex h-full flex-col">
@@ -74,24 +78,7 @@ export function ToolsSkillsPage() {
           <h2 className="text-sm font-semibold text-foreground">Skills</h2>
           <QueryState query={query} isEmpty={() => skills.length === 0}
             empty={<EmptyState icon={<Sparkles className="size-7" />} title="No skills registered" />}>
-            {() => (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {skills.map((s, i) => (
-                  <div key={`${s.name}-${i}`} className="rounded-xl border border-border bg-card p-4 shadow-xs">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="size-4 text-primary" />
-                      <span className="truncate font-medium text-foreground">{s.name || 'unnamed'}</span>
-                    </div>
-                    {s.agent_id && (
-                      <div className="mt-1 font-mono text-[11px] text-muted-foreground">{s.agent_id}</div>
-                    )}
-                    {s.description && (
-                      <p className="mt-2 line-clamp-3 text-xs text-muted-foreground">{s.description}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+            {() => <SkillsBrowser skills={skills} />}
           </QueryState>
         </section>
       </div>

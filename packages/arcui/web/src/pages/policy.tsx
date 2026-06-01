@@ -12,8 +12,10 @@ import {
 } from '@/components/ui/select'
 import { QueryState, EmptyState } from '@/components/states'
 import { PolicyBulletCard } from '@/components/policy-bullet'
+import { ScoreDistribution, PerAgentBreakdown } from '@/components/policy-views'
 import { filterBullets, sortBullets, type BulletSort } from '@/lib/policy'
 import { useTeamPolicyBullets, useTeamPolicyStats } from '@/lib/queries'
+import type { Dict } from '@/lib/types'
 
 export function PolicyPage() {
   const bulletsQuery = useTeamPolicyBullets()
@@ -23,10 +25,11 @@ export function PolicyPage() {
   const [sort, setSort] = useState<BulletSort>('score')
 
   const stats = statsQuery.data
+  const allBullets = useMemo(() => bulletsQuery.data?.bullets ?? [], [bulletsQuery.data])
+  const perAgent = (stats?.per_agent ?? []) as Dict[]
   const visible = useMemo(() => {
-    const all = bulletsQuery.data?.bullets ?? []
-    return sortBullets(filterBullets(all, { text: search, hideRetired }), sort)
-  }, [bulletsQuery.data, search, hideRetired, sort])
+    return sortBullets(filterBullets(allBullets, { text: search, hideRetired }), sort)
+  }, [allBullets, search, hideRetired, sort])
 
   return (
     <div className="flex h-full flex-col">
@@ -38,6 +41,13 @@ export function PolicyPage() {
           <StatCard label="Retired" value={stats?.retired ?? 0} />
           <StatCard label="Avg score" value={(stats?.avg_score ?? 0).toFixed(2)} />
         </div>
+
+        {allBullets.length > 0 && (
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <ScoreDistribution bullets={allBullets} />
+            <PerAgentBreakdown rows={perAgent} />
+          </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-3">
           <Input

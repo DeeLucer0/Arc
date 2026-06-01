@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Activity, Coins, Cpu, Gauge } from 'lucide-react'
+import { Activity, Coins, Cpu, Gauge, TrendingDown } from 'lucide-react'
 import { PageHeader } from '@/components/page-header'
 import { StatCard } from '@/components/stat-card'
 import { FilterPills } from '@/components/filter-pills'
@@ -71,10 +71,32 @@ function Overview() {
     () => Object.entries((s?.model_stats ?? {}) as Dict).map(([model, v]) => ({ model, ...(v as Dict) })),
     [s],
   )
+  const agentCost = useMemo(
+    () =>
+      Object.entries((s?.agent_perf ?? {}) as Dict)
+        .map(([label, v]) => ({ label, cost: Number((v as Dict)?.total_cost ?? 0) }))
+        .filter((d) => d.cost > 0)
+        .sort((a, b) => b.cost - a.cost),
+    [s],
+  )
+  const savings = eff.data?.potential_savings_usd ?? 0
 
   return (
     <div className="space-y-5">
       <FilterPills value={window} onChange={setWindow} options={WINDOWS} />
+
+      {savings > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-status-warning/30 bg-status-warning/10 px-4 py-2 text-sm text-foreground">
+          <TrendingDown className="size-4 text-status-warning" />
+          <span>Potential savings</span>
+          <strong className="font-semibold tabular-nums">{fmtCost(savings)}</strong>
+          {eff.data?.potential_savings_pct ? (
+            <span className="text-muted-foreground">({Math.round(eff.data.potential_savings_pct)}%)</span>
+          ) : null}
+          <span>by switching to</span>
+          <span className="font-mono text-xs">{eff.data?.cheapest_model ?? 'the cheapest model'}</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label="Requests" value={fmtNumber(s?.request_count ?? 0)} icon={<Activity className="size-4" />} hint={`${s?.error_count ?? 0} errors`} />
@@ -99,6 +121,12 @@ function Overview() {
           )}
         </ChartCard>
       </div>
+
+      {agentCost.length > 0 && (
+        <ChartCard title="Cost by agent">
+          <BarSeries data={agentCost} dataKey="cost" color="var(--chart-4)" />
+        </ChartCard>
+      )}
 
       <section className="space-y-2">
         <h3 className="text-sm font-semibold text-foreground">Model performance</h3>

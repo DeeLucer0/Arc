@@ -12,10 +12,12 @@ import type {
   PolicyResponse,
   PolicyStatsResponse,
   RunTimelineResponse,
+  SchedulesResponse,
   SessionReplayResponse,
   SessionsListResponse,
   SkillsResponse,
   SpawnTreeResponse,
+  StatsResponse,
   TasksResponse,
   TeamPolicyStatsResponse,
   TeamToolsSkillsResponse,
@@ -185,6 +187,24 @@ export const useAgentTraces = (agentId: string, limit = 200) =>
 
 export const useAgentSessions = (agentId: string) =>
   useApiQuery<SessionsListResponse>(['agent', agentId, 'sessions'], `/api/agents/${agentId}/sessions`)
+
+export const useAgentStats = (agentId: string, window = '24h') =>
+  useApiQuery<StatsResponse>(
+    ['agent', agentId, 'stats', window],
+    `/api/agents/${agentId}/stats?window=${window}`,
+  )
+
+export const useAgentTimeseries = (agentId: string, window = '24h') =>
+  useApiQuery<TimeseriesResponse>(
+    ['agent', agentId, 'timeseries', window],
+    `/api/stats/timeseries?window=${window}&agent_id=${encodeURIComponent(agentId)}`,
+  )
+
+export const useAgentTasks = (agentId: string) =>
+  useApiQuery<TasksResponse>(['agent', agentId, 'tasks'], `/api/agents/${agentId}/tasks`)
+
+export const useAgentSchedules = (agentId: string) =>
+  useApiQuery<SchedulesResponse>(['agent', agentId, 'schedules'], `/api/agents/${agentId}/schedules`)
 
 export const useAgentSessionReplay = (agentId: string, sid: string, page = 1) =>
   useApiQuery<SessionReplayResponse>(

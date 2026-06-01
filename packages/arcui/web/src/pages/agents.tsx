@@ -4,9 +4,63 @@ import { PageHeader } from '@/components/page-header'
 import { StatCard } from '@/components/stat-card'
 import { StatusDot } from '@/components/status-badge'
 import { QueryState, EmptyState } from '@/components/states'
-import { useRoster } from '@/lib/queries'
+import {
+  useAgentPolicyStats,
+  useAgentSchedules,
+  useAgentSessions,
+  useAgentTimeseries,
+  useRoster,
+} from '@/lib/queries'
 import { initials } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import type { Agent } from '@/lib/types'
+
+/** Tiny inline activity sparkline (24h token volume per bucket). */
+function Sparkline({ values }: { values: number[] }) {
+  const max = Math.max(1, ...values)
+  return (
+    <div className="flex h-7 items-end gap-0.5">
+      {values.length === 0 ? (
+        <span className="text-[11px] text-muted-foreground">No 24h activity</span>
+      ) : (
+        values.map((v, i) => (
+          <div
+            key={i}
+            className="w-full min-w-0.5 flex-1 rounded-sm bg-primary/60"
+            style={{ height: `${Math.max(6, Math.round((v / max) * 100))}%` }}
+          />
+        ))
+      )}
+    </div>
+  )
+}
+
+function Metric({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="text-center">
+      <div className="text-sm font-semibold tabular-nums text-foreground">{value}</div>
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+    </div>
+  )
+}
+
+function AgentCardMetrics({ agentId }: { agentId: string }) {
+  const sessions = useAgentSessions(agentId)
+  const schedules = useAgentSchedules(agentId)
+  const policy = useAgentPolicyStats(agentId)
+  const ts = useAgentTimeseries(agentId, '24h')
+  const volume = (ts.data?.buckets ?? []).map((b) => b.total_tokens ?? 0)
+  return (
+    <>
+      <div className="grid grid-cols-3 gap-2 border-t border-border/60 pt-2">
+        <Metric label="Sessions" value={sessions.data?.sessions?.length ?? 0} />
+        <Metric label="Schedules" value={schedules.data?.schedules?.length ?? 0} />
+        <Metric label="Bullets" value={policy.data?.total ?? 0} />
+      </div>
+      <Sparkline values={volume} />
+    </>
+  )
+}
 
 function AgentCard({ agent, onOpen }: { agent: Agent; onOpen: () => void }) {
   const label = agent.display_name || agent.name || agent.agent_id || 'unknown'
@@ -14,7 +68,10 @@ function AgentCard({ agent, onOpen }: { agent: Agent; onOpen: () => void }) {
     <button
       type="button"
       onClick={onOpen}
-      className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 text-left shadow-xs transition-colors hover:border-primary/40 hover:bg-muted/30"
+      className={cn(
+        'flex cursor-pointer flex-col gap-3 rounded-xl border border-border bg-card p-4 text-left',
+        'shadow-xs transition-colors hover:border-primary/40 hover:bg-muted/30',
+      )}
     >
       <div className="flex items-center gap-3">
         <span
@@ -54,6 +111,8 @@ function AgentCard({ agent, onOpen }: { agent: Agent; onOpen: () => void }) {
           </span>
         )}
       </div>
+
+      {agent.agent_id && <AgentCardMetrics agentId={agent.agent_id} />}
     </button>
   )
 }
