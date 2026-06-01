@@ -19,8 +19,9 @@ import { bootstrapAuth } from '@/lib/auth'
 // Consume `#auth=<token>` from the URL before anything else renders.
 bootstrapAuth()
 
-// Dark-only for v1; the theme tokens carry a light variant for a future toggle.
-document.documentElement.classList.add('dark')
+// Default: light. Add dark only if user explicitly picked dark.
+const storedTheme = (() => { try { return localStorage.getItem('arc-theme') } catch { return null } })()
+if (storedTheme === 'dark') document.documentElement.classList.add('dark')
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

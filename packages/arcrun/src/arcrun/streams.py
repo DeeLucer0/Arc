@@ -28,6 +28,7 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from arcrun.capabilities import CapabilityProvider
 from arcrun.events import Event
 from arcrun.types import LoopResult, SandboxConfig, Tool
 
@@ -143,7 +144,7 @@ async def collect(stream: AsyncIterator[StreamEvent]) -> RunResult:
 async def run_stream(
     *,
     model: Any,
-    tools: list[Tool],
+    capabilities: CapabilityProvider,
     system_prompt: str,
     task: str,
     messages: list[Any] | None = None,
@@ -250,7 +251,7 @@ async def run_stream(
         try:
             result = await run(
                 model,
-                tools,
+                capabilities,
                 system_prompt,
                 task,
                 messages=messages,

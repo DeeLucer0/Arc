@@ -10,6 +10,13 @@ from arcrun.builtins import (
     SandboxUnavailableError,
     make_execute_tool,
 )
+from arcrun.capabilities import (
+    CapabilityProvider,
+    CapabilityResult,
+    CapabilitySpec,
+    StaticProvider,
+    provider_tools,
+)
 from arcrun.events import GENESIS_PREV_HASH, ChainVerificationResult, Event, EventBus, verify_chain
 from arcrun.loop import RunHandle, run, run_async
 from arcrun.prompts import get_strategy_prompts
@@ -30,6 +37,9 @@ from arcrun.types import LoopResult, SandboxConfig, Tool, ToolContext
 
 __all__ = [
     "GENESIS_PREV_HASH",
+    "CapabilityProvider",
+    "CapabilityResult",
+    "CapabilitySpec",
     "ChainVerificationResult",
     "Event",
     "EventBus",
@@ -37,6 +47,7 @@ __all__ = [
     "RunHandle",
     "RunResult",
     "SandboxConfig",
+    "StaticProvider",
     "SandboxError",
     "SandboxOOMError",
     "SandboxRuntimeError",
@@ -55,6 +66,7 @@ __all__ = [
     "collect",
     "get_strategy_prompts",
     "make_execute_tool",
+    "provider_tools",
     "run",
     "run_async",
     "run_stream",
