@@ -3,12 +3,12 @@
 # ⌨️ arccli
 
 ### **The `arc` Command-Line Tool**
-*Argparse-based. JSON output on every data command. The single front door to the entire Arc stack.*
+*Slash-command registry. JSON output on every data command. The single front door to the entire Arc stack.*
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Tests](https://img.shields.io/badge/tests-283-success.svg)](#status)
+[![Tests](https://img.shields.io/badge/tests-303-success.svg)](#status)
 [![Strict mypy](https://img.shields.io/badge/mypy-strict-2563EB.svg)](#status)
-[![Pure stdlib argparse](https://img.shields.io/badge/argparse-pure_stdlib-2563EB.svg)](#)
+[![Slash-command registry](https://img.shields.io/badge/registry-slash_commands-2563EB.svg)](#)
 
 </div>
 
@@ -18,9 +18,9 @@
 
 `arccli` is the unified `arc` command-line tool. Every Arc operation — creating an agent, running it, listing tools, inspecting LLM providers, starting the dashboard, approving a chat-platform pairing — is one `arc` subcommand.
 
-It's pure stdlib `argparse`. **No Click, no Typer, no third-party CLI framework.** That's a deliberate choice: fewer moving parts in the trust path.
+It's built on a **centralized slash-command registry** with lazy handler dispatch. **No Click, no Typer, no third-party CLI framework.** Subcommand groups (agent, llm, run, etc.) use stdlib `argparse` internally, but the top-level routing is a flat `CommandDef` registry shared by arccli, arcgateway, and platform adapters.
 
-> ⚡ **Single binary. Argparse plain handlers. `--json` on every data command. CI-friendly by default.**
+> ⚡ **Two modes: one-shot (`arc <command>`) and interactive REPL (`arc`). `--json` on every data command. CI-friendly by default.**
 
 ---
 
@@ -56,8 +56,8 @@ pip install arcmas              # full Arc stack (includes arccli)
 After install, the `arc` command is on your PATH:
 
 ```bash
-arc help
-arc version
+arc version                     # one-shot mode
+arc                             # interactive REPL with tab-completion
 ```
 
 ---
@@ -68,15 +68,23 @@ arc version
 # First-time setup (interactive: tier, provider, API key)
 arc init
 
+# Or quick-start with open tier
+arc init --quick
+
 # Create an agent
 arc agent create my-agent --model anthropic/claude-sonnet-4-5-20250929
 
 # Validate
 arc agent build my-agent --check
 
-# Run
+# Interactive chat
 arc agent chat my-agent
+
+# One-shot task
 arc agent run my-agent "Summarize workspace/data/"
+
+# One-shot with context file
+arc agent run my-agent "Analyze this" --context ./report.md --json
 ```
 
 ---
@@ -85,12 +93,12 @@ arc agent run my-agent "Summarize workspace/data/"
 
 | Group | Purpose |
 |---|---|
-| **`arc agent`** | Agent lifecycle — create, build, chat, run, serve, status, tools, skills, extensions, sessions, config, reload |
-| **`arc llm`** | LLM provider operations — version, config, providers, provider, models, validate |
+| **`arc agent`** | Agent lifecycle — create, build, chat, run, serve, status, tools, skills, extensions, sessions, config, reload, strategies, events |
+| **`arc llm`** | LLM provider operations — version, config, providers, provider, models, prompt, validate |
 | **`arc run`** | arcrun loop without an agent directory — version, exec, task |
 | **`arc skill`** | Skill management — list, create, validate, search |
 | **`arc ext`** | Extension management — list, create, install, validate |
-| **`arc team`** | Team messaging — status, config, init, register, entities, channels, memory-status |
+| **`arc team`** | Team messaging — status, config, init, register, entities, channels, memory-status, backfill-workspaces |
 | **`arc ui`** | Multi-agent dashboard — start, tail |
 | **`arc gateway pair`** | Gateway pairing operator commands — list, approve, revoke |
 | **`arc init`** | Interactive first-time setup wizard with tier presets |
@@ -104,19 +112,28 @@ arc agent run my-agent "Summarize workspace/data/"
 
 ```bash
 # === Setup ===
-arc init                                                  # tier wizard
-arc init --tier enterprise --provider anthropic           # non-interactive
+arc init                                                  # tier wizard (interactive)
+arc init --tier federal --provider anthropic               # non-interactive
+arc init --quick                                          # quick-start with open tier
 
 # === Agents ===
 arc agent create my-agent --model anthropic/claude-sonnet-4-5-20250929
+arc agent create my-agent --with-code-exec                # with sandboxed code execution
+arc agent create my-agent --no-register                   # skip arcteam registration
 arc agent build my-agent --check                          # ALWAYS pass --check
 arc agent chat my-agent
+arc agent chat my-agent --task "one-shot question"        # non-interactive single turn
+arc agent chat my-agent --session-id <id>                 # resume session
+arc agent chat my-agent --max-turns 20                    # override turn limit
 arc agent run my-agent "task description"
+arc agent run my-agent "analyze this" --context ./data.md # stage context file
+arc agent run my-agent "summarize" --json                 # structured output
+arc agent run my-agent "task" --max-turns 5 -v            # verbose with turn limit
 arc agent serve my-agent                                  # daemon
-arc agent serve my-agent --ui                             # daemon + dashboard
 arc agent status my-agent
 arc agent config my-agent --json
-arc agent tools my-agent
+arc agent tools my-agent --json
+arc agent tools my-agent --with-code-exec
 arc agent skills my-agent
 arc agent extensions my-agent
 arc agent sessions my-agent
@@ -136,11 +153,15 @@ arc llm models --tools
 arc llm models --vision
 arc llm validate
 arc llm validate --provider anthropic
+arc llm prompt "What is 2+2?" --model anthropic/claude-haiku-4-5-20251001
 
 # === Direct runs (no agent dir) ===
 arc run version
 arc run task "Calculate 2^32" --with-calc --model anthropic/claude-haiku-4-5-20251001
-arc run exec --tool calculator --params '{"expression": "2 ** 32"}'
+arc run task "Write a script" --with-code-exec --strategy code
+arc run task "Research topic" --no-spawn                  # disable parallel sub-tasks
+arc run exec "print(2 ** 32)"                             # sandboxed Python execution
+arc run exec "import math; print(math.pi)" --timeout 10
 
 # === Skills (SPEC-021 folder format) ===
 arc skill list
@@ -171,13 +192,16 @@ arc team entities
 arc team entities --role lead
 arc team channels
 arc team memory-status
+arc team backfill-workspaces                                    # sync workspace paths from arcagent.toml
 
 # === Multi-agent dashboard ===
 arc ui start
 arc ui start --port 9000 --show-tokens
-arc ui start --host 0.0.0.0
-arc ui start --max-agents 500
-arc ui start --traces-dir /var/arc/traces
+arc ui start --host 0.0.0.0 --max-agents 500
+arc ui start --team-root ./team                                 # agent discovery directory
+arc ui start --gateway-config ./gateway.toml                    # enable Slack/Telegram
+arc ui start --no-browser                                       # headless / CI
+arc ui start --no-chat                                          # disable web chat platform
 arc ui tail --viewer-token <t>
 arc ui tail --viewer-token <t> --layer llm
 arc ui tail --viewer-token <t> --agent did:arc:acme:.../
@@ -188,9 +212,10 @@ arc gateway pair list
 arc gateway pair approve ABCD1234
 arc gateway pair revoke ABCD1234
 
-# === Help ===
+# === Help & REPL ===
 arc help
 arc version
+arc                                                             # start interactive REPL
 ```
 
 ---
@@ -201,15 +226,14 @@ While inside `arc agent chat`:
 
 | Command | Effect |
 |---|---|
-| `/quit`, `/exit` | Exit chat |
-| `/help` | Show all REPL commands |
+| `/quit` | Exit chat |
 | `/tools` | List tools the agent can call |
 | `/model` | Show current model |
 | `/cost` | Running USD spend |
 | `/reload` | Hot-reload skills + extensions |
 | `/skills` | List discovered skills |
 | `/extensions` | List loaded extensions |
-| `/session` | Current session ID |
+| `/session` | Current session info |
 | `/sessions` | List past sessions |
 | `/switch <id>` | Resume a previous session |
 | `/identity` | Show DID, org, type |
@@ -235,15 +259,15 @@ arc init --tier federal --provider anthropic --dir /etc/arc
 
 ---
 
-## 🛡️ Why Argparse, Not Click?
+## 🛡️ Architecture: Slash-Command Registry
 
-Three reasons:
+`arccli` uses a **centralized `CommandDef` registry** — the same registry that arcgateway and platform adapters (Slack, Telegram, web) consume. Each command is a frozen dataclass with metadata (name, description, category, aliases, visibility flags) and a lazily-attached handler.
 
-1. **Fewer dependencies in the trust path.** `argparse` ships with Python. Click is one more thing to audit.
-2. **Predictable CI behavior.** No "did Click upgrade and change `--option` parsing?"
-3. **Easier to read and modify.** Arc's CLI is a few hundred lines of plain handlers — anyone can grep for `def cmd_` and find the entry points.
+Why this design:
 
-The whole CLI is **pure stdlib argparse with plain handler functions.** No magic. No metaclasses. No decorator trees. Just `if args.subcommand == "...": call_function(args)`.
+1. **Fewer dependencies in the trust path.** No Click, no Typer — `argparse` ships with Python and is only used inside subcommand groups, not at the top level.
+2. **Shared contract.** The registry is the single source of truth for arccli, arcgateway, and chat platforms. Gateway-only commands (`gateway pair *`) are invisible in the CLI help. CLI-only commands (`init`, `quit`) don't appear in Telegram menus.
+3. **Easier to read and modify.** Every command entry is a `CommandDef` in `arccli.commands.registry`. Handlers are plain functions. No metaclasses, no decorator trees.
 
 ---
 
@@ -264,7 +288,7 @@ The whole CLI is **pure stdlib argparse with plain handler functions.** No magic
 uv run --no-sync pytest packages/arccli/tests
 ```
 
-- **Tests:** 283
+- **Tests:** 303
 - **Type check:** `mypy --strict` clean
 - **Lint:** `ruff check` clean
 

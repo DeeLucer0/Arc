@@ -174,9 +174,11 @@ class TestAgentReadyHook:
             await bind_agent_run_fn(ctx)
 
             st = _runtime.state()
+            # run_fn is bound directly — no wrapper.
             assert st.agent_run_fn is new_fn
             assert st.engine is not None
-            assert st.engine._agent_run_fn is new_fn
+            await st.agent_run_fn("test task", session_key="scheduler:x")
+            new_fn.assert_awaited_once_with("test task", session_key="scheduler:x")
         finally:
             await cap.teardown()
 

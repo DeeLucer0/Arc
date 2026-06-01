@@ -2,12 +2,16 @@
 
 Subcommand dispatch is argparse-based so the top-level
 `arc agent <sub> [args]` contract is preserved exactly.
+
+Module CLIs (bio-memory, memory, policy, browser) are Click groups
+delegated via ``_run_module_cli`` before argparse parsing.
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
+from pathlib import Path
 
 from arccli.commands.agent.build import _build
 from arccli.commands.agent.chat import _chat
@@ -97,6 +101,19 @@ def _build_parser() -> argparse.ArgumentParser:
     p = subs.add_parser("run", help="Run a task against an agent.")
     p.add_argument("path", help="Agent directory.")
     p.add_argument("task", help="Task to run.")
+    p.add_argument("--model", default=None, help="Override model (provider/model).")
+    p.add_argument(
+        "--context",
+        default=None,
+        help="Stage context: literal text or path to a file. "
+        "Written to workspace/context.md before the agent starts.",
+    )
+    p.add_argument(
+        "--json",
+        dest="as_json",
+        action="store_true",
+        help="Output full result as JSON (includes completion_payload).",
+    )
     p.add_argument("--verbose", "-v", action="store_true")
     p.add_argument("--max-turns", dest="max_turns", type=int, default=None)
 
@@ -140,11 +157,47 @@ _SUBCOMMAND_MAP = {
 }
 
 
+_MODULE_CLI_MAP = {
+    "bio-memory": "arcagent.modules.bio_memory.cli",
+    "memory": "arcagent.modules.memory.cli",
+    "policy": "arcagent.modules.policy.cli",
+    "browser": "arcagent.modules.browser.cli",
+}
+
+
+def _run_module_cli(module_import: str, args: list[str]) -> None:
+    """Delegate to a Click-based module CLI group.
+
+    Usage: ``arc agent <module-name> <path> [subcommands...]``
+    The first positional arg is the agent directory; remaining args
+    are forwarded to the Click group.
+    """
+    import importlib
+
+    if not args:
+        sys.stderr.write(f"Usage: arc agent {module_import.split('.')[-2]} <path> [subcommand]\n")
+        sys.exit(1)
+
+    agent_dir = Path(args[0]).resolve()
+    workspace = agent_dir / "workspace"
+    remaining = args[1:]
+
+    mod = importlib.import_module(module_import)
+    group = mod.cli_group(workspace)
+    group(remaining, standalone_mode=True)
+
+
 def agent_handler(args: list[str]) -> None:
     """Top-level handler for `arc agent <sub> [args]`.
 
     Called by arccli.commands.registry when the user runs `arc agent ...`.
+    Module CLIs (bio-memory, memory, policy, browser) are delegated to
+    their Click groups before argparse parsing.
     """
+    if args and args[0] in _MODULE_CLI_MAP:
+        _run_module_cli(_MODULE_CLI_MAP[args[0]], args[1:])
+        return
+
     parser = _build_parser()
 
     if not args:

@@ -7,6 +7,8 @@ import asyncio
 import sys
 from pathlib import Path
 
+from arcrun import collect
+
 from arccli.commands.agent._common import (
     _load_arcagent,
     _load_env,
@@ -20,6 +22,7 @@ async def _agent_run_once(
     agent_dir: Path,
     task: str,
     model_override: str | None,
+    context: str | None,
     verbose: bool,
     as_json: bool,
 ) -> None:
@@ -30,9 +33,21 @@ async def _agent_run_once(
     if model_override:
         config.llm.model = model_override
 
+    if context is not None:
+        context_path = agent_dir / "workspace" / "context.md"
+        context_path.parent.mkdir(parents=True, exist_ok=True)
+        source = Path(context)
+        if source.is_file():
+            context_path.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        else:
+            context_path.write_text(context, encoding="utf-8")
+
     await arc_agent.startup()
     try:
-        result = await arc_agent.run(task)
+        # One streaming entry — open-or-resume a deterministic local session and
+        # collect the stream to a final result (SPEC-027 AC-2.2).
+        session = await arc_agent.session("cli:run")
+        result = await collect(arc_agent.run(task, session=session))
 
         if as_json:
             _print_result_json(result)
@@ -42,7 +57,7 @@ async def _agent_run_once(
             if verbose:
                 sys.stdout.write(
                     f"\n[{result.turns} turns, {result.tool_calls_made} tool calls, "
-                    f"${result.cost_usd:.4f}, strategy={result.strategy_used}]\n"
+                    f"${result.cost_usd:.4f}]\n"
                 )
     finally:
         await arc_agent.shutdown()
@@ -57,6 +72,7 @@ def _run(args: argparse.Namespace) -> None:
             agent_dir=agent_dir,
             task=args.task,
             model_override=getattr(args, "model", None),
+            context=getattr(args, "context", None),
             verbose=getattr(args, "verbose", False),
             as_json=getattr(args, "as_json", False),
         )
