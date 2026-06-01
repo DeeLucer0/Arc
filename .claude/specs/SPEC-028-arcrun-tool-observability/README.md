@@ -1,7 +1,7 @@
 ---
 spec_id: SPEC-028
 name: arcrun-tool-observability
-status: pending
+status: complete
 created: 2026-05-31
 type: integration
 intake_confidence: 0.90
@@ -83,4 +83,5 @@ expanding a closed one.
 | Date | Status | Note |
 |---|---|---|
 | 2026-05-31 | PENDING | Spec scoped from a post-SPEC-026 review question ("does arcrun show code/spawn, and does arcllm separate parent vs child calls?"). Findings F1–F7 verified in code. Awaiting approval to implement. |
+| 2026-05-31 | COMPLETE | All 4 phases implemented TDD. P1: `tool_event`+`spawn_event` spool kinds (shared `_OPERATIONAL_COLUMNS` extended, idempotent ingest). P2: arcrun digests args/result at source in `executor.py` (C1), EventBus maps `tool.*`→`tool_event` with bodies gated by `store_raw_bodies` + EventBus-level `sample_rate` (errors/lifecycle never sampled). P3: arcllm `agent_identity` contextvar (C2, concurrency-safe), spawn passes `actor_did=child_did` + emits `spawn_event` at both call sites. P4: Observe `tool_events`/`timeline`/`spawn_tree`/`llm_by_identity` + pull-only routes (`/api/runs/{id}/timeline`, `/api/spawn-tree`, `/api/stats/by-identity`) + React surfaces (RunTimeline, SpawnLineage, IdentityCostTable). arcstore 60, arcrun 424, arcllm 927, arcagent spawn/delegate 163, arcui 453 tests green; ruff + mypy --strict clean; no push wire reintroduced. |
 | 2026-05-31 | DEEPENED | `/deepen` — 5 parallel research agents (3 codebase, 2 web). Added SDD §11 Research Insights + 2 design-changing corrections: **C1** — `tool.end` emits only `result_length`, so digest must be computed at source in `arcrun/executor.py` (not `events.py`); **C2** — child-LLM identity must use **contextvars**, not `set_global_defaults` (global race corrupts concurrent `spawn_many`). Confirmed: extend shared `_OPERATIONAL_COLUMNS` (don't fork); `actor_did=child_did` is the one-arg fix for child run_events; lineage = flat edge + parent pointer rebuilt on read (universal industry pattern); cost stored at llm_call leaf, aggregated on read (no double-count); `[arcstore].sample_rate` is currently unwired — wire at EventBus, never sample errors/run_event/spawn_event; align field names to OTel GenAI semconv (`gen_ai.tool.*`), record stays flat. Digest-by-default validated as NIST AU-9(3)-compliant + OWASP LLM02-safe (regex can't recognize CUI). PLAN tasks 2.4a/2.6/2.8/3.2a/3.2b/4.0 added. |

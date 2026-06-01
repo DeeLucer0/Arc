@@ -1,6 +1,6 @@
 # SPEC-028 — ArcRun Tool / Code / Spawn Observability: Implementation Plan
 
-**Status:** PENDING (DEEPENED 2026-05-31 — see SDD §11)
+**Status:** COMPLETE (implemented 2026-05-31 — all 4 phases; see SDD §11)
 **Phases:** 4 (spool kinds → arcrun tool spooling → spawn identity+lineage → arcui surfaces)
 **Approval gates:** end of each phase
 **Pillar trace:** every task lists its primary pillar(s) — Simplicity (S), Modularity (M), Security (Sec), Scalability (Sc).
@@ -69,16 +69,16 @@
 
 | # | Task | Module | Pillar | Test | Done |
 |---|---|---|---|---|---|
-| 4.0 | Ensure `tool_event` carries `request_id == run_id` so a run's llm_call + run_event + tool_event streams join on one key (research §11.4) | `arcrun`,`arcstore` | S | covered by 2.4 + `test_observe.py::test_timeline_joins_on_run_id` | [ ] |
-| 4.1 | Failing test: `Observe.tool_events(run_id)` returns ordered tool/code events (query-per-table, merge by `ts` in Python) | `arcui` | S | `tests/test_observe.py::test_tool_events_query` | [ ] |
-| 4.2 | Failing test: `Observe.spawn_tree(...)` assembles parent→child tree from `spawn_events` | `arcui` | S | `tests/test_observe.py::test_spawn_tree_query` | [ ] |
-| 4.3 | Failing test: `Observe.llm_by_identity(window)` separates parent vs child by `agent_label` | `arcui` | M | `tests/test_observe_stats.py::test_llm_by_identity` | [ ] |
-| 4.4 | Implement Observe queries | `arcui` | S, M | 4.1–4.3 pass | [ ] |
-| 4.5 | Failing test: read routes return tool timeline + spawn tree + identity cost JSON | `arcui` | M | `tests/test_routes.py::test_tool_and_lineage_routes` | [ ] |
-| 4.6 | Implement read routes (pull, short-lived query, `agent_label` filter) | `arcui` | M, Sc | 4.5 passes | [ ] |
-| 4.7 | Frontend: per-run tool/code timeline, spawn lineage tree, identity cost breakdown (read-on-demand React Query, no polling) | `arcui` | S, Sc | `tests/unit/test_react_frontend.py` (route/asset wiring) | [ ] |
-| 4.8 | Integration: run-with-code + spawn → arcui shows code, child I/O, separated cost; server restart loses nothing | `arcui` | Sc | `tests/integration/test_tool_spawn_flow.py` | [ ] |
-| 4.9 | Architecture test: arcui reads only (not a sink/subscriber); no push reintroduced | `arcui` | M | existing `test_no_push_pipeline.py` extended | [ ] |
+| 4.0 | Ensure `tool_event` carries `request_id == run_id` so a run's llm_call + run_event + tool_event streams join on one key (research §11.4) | `arcrun`,`arcstore` | S | covered by 2.4 + `test_observe.py::test_timeline_joins_on_run_id` | [x] |
+| 4.1 | Failing test: `Observe.tool_events(run_id)` returns ordered tool/code events (query-per-table, merge by `ts` in Python) | `arcui` | S | `tests/test_observe.py::test_tool_events_query` | [x] |
+| 4.2 | Failing test: `Observe.spawn_tree(...)` assembles parent→child tree from `spawn_events` | `arcui` | S | `tests/test_observe.py::test_spawn_tree_query` | [x] |
+| 4.3 | Failing test: `Observe.llm_by_identity(window)` separates parent vs child by `agent_label` | `arcui` | M | `tests/test_observe_stats.py::test_llm_by_identity` | [x] |
+| 4.4 | Implement Observe queries | `arcui` | S, M | 4.1–4.3 pass | [x] |
+| 4.5 | Failing test: read routes return tool timeline + spawn tree + identity cost JSON | `arcui` | M | `tests/test_routes.py::test_tool_and_lineage_routes` | [x] |
+| 4.6 | Implement read routes (pull, short-lived query, `agent_label` filter) | `arcui` | M, Sc | 4.5 passes | [x] |
+| 4.7 | Frontend: per-run tool/code timeline, spawn lineage tree, identity cost breakdown (read-on-demand React Query, no polling) | `arcui` | S, Sc | `tests/unit/test_react_frontend.py` (route/asset wiring) | [x] |
+| 4.8 | Integration: run-with-code + spawn → arcui shows code, child I/O, separated cost; server restart loses nothing | `arcui` | Sc | `tests/integration/test_tool_spawn_flow.py` | [x] |
+| 4.9 | Architecture test: arcui reads only (not a sink/subscriber); no push reintroduced | `arcui` | M | existing `test_no_push_pipeline.py` extended | [x] |
 
 **Phase 4 acceptance:** AC-4.1–4.4 pass; gates clean.
 
@@ -86,14 +86,14 @@
 
 ## Definition of Done (whole spec)
 
-- [ ] All phase acceptance criteria pass (fresh test output).
-- [ ] **C1 closed:** `result_digest` is a digest of the result *content*, not its length (digest computed at source in `executor.py`).
-- [ ] **C2 closed:** concurrent `spawn_many` children are never cross-attributed (contextvar identity test green).
-- [ ] Import DAG holds: arcrun imports only `arcstore.spool`; spawn stays arcagent; telemetry identity stays arcllm; arcui is read-only.
-- [ ] Metadata-only by default proven (no code/args/result/child bodies unless `store_raw_bodies=true`); errors + `run_event` + `spawn_event` never sampled out.
-- [ ] UC-1 (see code), UC-2 (see spawned agent), UC-3 (separated cost) demonstrated end-to-end.
-- [ ] `ruff check`, `mypy --strict`, coverage ≥80% green on all changed packages.
-- [ ] README status → COMPLETE.
+- [x] All phase acceptance criteria pass (fresh test output).
+- [x] **C1 closed:** `result_digest` is a digest of the result *content*, not its length (digest computed at source in `executor.py`).
+- [x] **C2 closed:** concurrent `spawn_many` children are never cross-attributed (contextvar identity test green).
+- [x] Import DAG holds: arcrun imports only `arcstore.spool`; spawn stays arcagent; telemetry identity stays arcllm; arcui is read-only.
+- [x] Metadata-only by default proven (no code/args/result/child bodies unless `store_raw_bodies=true`); errors + `run_event` + `spawn_event` never sampled out.
+- [x] UC-1 (see code), UC-2 (see spawned agent), UC-3 (separated cost) demonstrated end-to-end.
+- [x] `ruff check`, `mypy --strict`, coverage ≥80% green on all changed packages.
+- [x] README status → COMPLETE.
 
 ## Suggested Branch
 

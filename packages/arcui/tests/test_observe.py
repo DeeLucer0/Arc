@@ -74,3 +74,83 @@ async def test_stats_rolls_up_from_store(tmp_path: Path) -> None:
         assert stats["latency_avg"] == 42.0
     finally:
         await observe.stop()
+
+
+# SPEC-028 — tool/code timeline + spawn lineage + per-identity cost (FR-4)
+
+
+def _spool(data_dir: Path):
+    spool = data_dir / "spool"
+    spool.mkdir(parents=True, exist_ok=True)
+    return spool / "operational-2026-05-31.jsonl"
+
+
+def _write(data_dir: Path, rec: SpoolRecord) -> None:
+    spool_record(rec, path=_spool(data_dir))
+
+
+async def test_tool_events_query(tmp_path: Path) -> None:
+    """Task 4.1 — Observe.tool_events(run_id) returns ordered tool/code events."""
+    _write(tmp_path, SpoolRecord(kind="tool_event", actor_did="did:c", request_id="run-1",
+                                 ts="2026-05-31T00:00:01+00:00", tool_name="web.fetch",
+                                 phase="start", args_digest="a" * 64, args_size=10))
+    _write(tmp_path, SpoolRecord(kind="tool_event", actor_did="did:c", request_id="run-1",
+                                 ts="2026-05-31T00:00:02+00:00", tool_name="web.fetch",
+                                 phase="end", outcome="ok", latency_ms=12.0,
+                                 result_digest="b" * 64, result_size=99))
+    # A different run's event must not leak in.
+    _write(tmp_path, SpoolRecord(kind="tool_event", actor_did="did:c", request_id="run-2",
+                                 ts="2026-05-31T00:00:03+00:00", tool_name="other", phase="start"))
+    observe = Observe(data_dir=tmp_path)
+    await observe.start()
+    try:
+        events = await observe.tool_events(run_id="run-1")
+        assert [e["phase"] for e in events] == ["start", "end"]
+        assert events[0]["tool_name"] == "web.fetch"
+        assert events[1]["result_digest"] == "b" * 64
+    finally:
+        await observe.stop()
+
+
+async def test_timeline_joins_on_run_id(tmp_path: Path) -> None:
+    """Task 4.0 — a run's llm_call + run_event + tool_event join on request_id==run_id."""
+    _write(tmp_path, SpoolRecord(kind="run_event", actor_did="did:c", request_id="run-1",
+                                 ts="2026-05-31T00:00:01+00:00", name="turn.start"))
+    _write(tmp_path, SpoolRecord(kind="tool_event", actor_did="did:c", request_id="run-1",
+                                 ts="2026-05-31T00:00:02+00:00", tool_name="web.fetch", phase="start"))
+    _write(tmp_path, SpoolRecord(kind="llm_call", actor_did="did:c", request_id="run-1",
+                                 ts="2026-05-31T00:00:03+00:00", model="claude", outcome="ok"))
+    observe = Observe(data_dir=tmp_path)
+    await observe.start()
+    try:
+        timeline = await observe.timeline(run_id="run-1")
+        kinds = [e["kind"] for e in timeline]
+        assert kinds == ["run_event", "tool_event", "llm_call"]  # ordered by ts
+        assert all(e["request_id"] == "run-1" for e in timeline)
+    finally:
+        await observe.stop()
+
+
+async def test_spawn_tree_query(tmp_path: Path) -> None:
+    """Task 4.2 — Observe.spawn_tree assembles a parent→child tree from spawn_events."""
+    _write(tmp_path, SpoolRecord(kind="spawn_event", actor_did="did:child1",
+                                 parent_did="did:parent", child_did="did:child1",
+                                 role="researcher", depth=1, outcome="allow"))
+    _write(tmp_path, SpoolRecord(kind="spawn_event", actor_did="did:child2",
+                                 parent_did="did:parent", child_did="did:child2",
+                                 role="writer", depth=1, outcome="allow"))
+    _write(tmp_path, SpoolRecord(kind="spawn_event", actor_did="did:gc",
+                                 parent_did="did:child1", child_did="did:gc",
+                                 role="helper", depth=2, outcome="allow"))
+    observe = Observe(data_dir=tmp_path)
+    await observe.start()
+    try:
+        tree = await observe.spawn_tree(root_did="did:parent")
+        assert tree["did"] == "did:parent"
+        children = {c["did"] for c in tree["children"]}
+        assert children == {"did:child1", "did:child2"}
+        c1 = next(c for c in tree["children"] if c["did"] == "did:child1")
+        assert c1["role"] == "researcher"
+        assert [g["did"] for g in c1["children"]] == ["did:gc"]
+    finally:
+        await observe.stop()
