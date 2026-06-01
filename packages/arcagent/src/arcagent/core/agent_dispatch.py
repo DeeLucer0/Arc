@@ -22,6 +22,7 @@ from arcllm import Message
 from arcrun import Event, StreamEvent, TurnEndEvent, get_strategy_prompts
 from arcrun import run_stream as arcrun_run_stream
 
+from arcagent.capabilities.provider import WORKSPACE_ROOT, AgentCapabilityProvider, _Skill
 from arcagent.core.module_bus import ModuleBus
 from arcagent.core.session_internal import SessionManager
 from arcagent.core.telemetry import AgentTelemetry
@@ -38,54 +39,50 @@ async def build_run_context(
     AgentTelemetry,
     ModuleBus,
     Any,  # model
-    list[Any],  # arcrun tools
+    AgentCapabilityProvider,  # the unified capability surface for arcrun
     str,  # system_prompt
     Callable[[Event], None],  # bridge
 ]:
-    """Prepare shared run context for both blocking and async paths.
+    """Prepare shared run context for the streaming run.
 
-    Returns the common objects needed to invoke arcrun.
-    Assembles the agent-side toolkit: registry tools + (optionally)
-    spawn_task. Merges strategy and orchestration prompt guidance
-    into the system prompt so the model knows when/how to use
-    each capability. Emits agent:pre_respond before returning.
+    Assembles the agent's capabilities into an ``AgentCapabilityProvider``
+    (ADR-023): policy-wrapped registry tools (invocable) + the agent's skills
+    (lazily loaded) + spawn (dispatched with live context). Merges strategy and
+    orchestration prompt guidance into the system prompt. Emits
+    ``agent:pre_respond`` before returning.
     """
     from arcagent.core.model_manager import create_arcrun_bridge
 
     telemetry, tool_registry, context, bus = agent._ensure_started()
     model = agent._ensure_model()
 
-    tools = tool_registry.to_arcrun_tools()
+    invoke_tools = tool_registry.to_arcrun_tools()
 
     # Strategy prompt guidance — arcrun-owned strategies and tools.
-    tool_names = [t.name for t in tools]
+    tool_names = [t.name for t in invoke_tools]
     strategy_sections = get_strategy_prompts(tool_names=tool_names)
 
-    # Orchestration: register spawn_task if config enables it.
-    # Closure mutation lets children inherit spawn_task — the tool's
-    # closure captures ``tools`` by reference, so appending after
-    # construction makes spawn visible to nested children too.
+    # Orchestration: spawn_task is context-dependent (reads depth/budget from the
+    # loop's ToolContext), so it is dispatched directly, not routed through the
+    # context-free invoke() path. Children inherit spawn + the invoke tools.
+    ctx_tools: list[Any] = []
     if agent._config.spawn.enabled:
         from arcagent.orchestration import SPAWN_GUIDANCE, make_spawn_tool
 
-        # Children get the same orchestration guidance so nested
-        # decomposition behaves consistently.
         child_system_prompt = await context.assemble_system_prompt(
             agent._workspace,
-            extra_sections={
-                **strategy_sections,
-                "spawn_guidance": SPAWN_GUIDANCE,
-            },
+            extra_sections={**strategy_sections, "spawn_guidance": SPAWN_GUIDANCE},
         )
-        tools = list(tools)  # mutable for closure-mutation pattern
+        child_tools = list(invoke_tools)  # closure ref — append makes children see spawn
         spawn_tool = make_spawn_tool(
             model=model,
-            tools=tools,  # closure ref — append below makes children see spawn too
+            tools=child_tools,
             system_prompt=child_system_prompt,
             spawn_timeout_seconds=agent._config.spawn.timeout_seconds,
             max_concurrent_spawns=agent._config.spawn.max_concurrent,
         )
-        tools.append(spawn_tool)
+        child_tools.append(spawn_tool)
+        ctx_tools = [spawn_tool]
         strategy_sections = {**strategy_sections, "spawn_guidance": SPAWN_GUIDANCE}
 
     system_prompt = await context.assemble_system_prompt(
@@ -97,8 +94,56 @@ async def build_run_context(
         agent_label=agent._config.agent.name,
     )
 
+    provider = AgentCapabilityProvider(
+        tools=invoke_tools,
+        ctx_tools=ctx_tools,
+        skills=_agent_skills(agent),
+        tier=str(agent._config.security.tier),
+        caller_did=agent._identity.did if agent._identity else "did:arc:unknown",
+        workspace_authored=_workspace_authored(agent),
+    )
+
     await bus.emit("agent:pre_respond", {"task": task})
-    return telemetry, bus, model, tools, system_prompt, bridge
+    return telemetry, bus, model, provider, system_prompt, bridge
+
+
+def _agent_skills(agent: ArcAgent) -> list[_Skill]:
+    """Snapshot the agent's registered skills as lean, loadable specs."""
+    registry = agent._capability_registry
+    if registry is None:
+        return []
+    return [
+        _Skill(
+            name=entry.name,
+            description=entry.description,
+            location=entry.location,
+            scan_root=entry.scan_root,
+        )
+        for entry in registry._skills.values()
+    ]
+
+
+def _workspace_authored(agent: ArcAgent) -> frozenset[str]:
+    """Names of capabilities (tools + skills) the agent authored at runtime.
+
+    These live under ``<workspace>/.capabilities`` (scan_root == "workspace")
+    and are denied in federal tier (AC-6.1). Pulled from the capability registry,
+    which records each entry's scan_root.
+    """
+    registry = agent._capability_registry
+    if registry is None:
+        return frozenset()
+    names = {
+        name
+        for name, entry in registry._tools.items()
+        if entry.scan_root == WORKSPACE_ROOT
+    }
+    names |= {
+        name
+        for name, entry in registry._skills.items()
+        if entry.scan_root == WORKSPACE_ROOT
+    }
+    return frozenset(names)
 
 
 async def dispatch_stream(
@@ -119,7 +164,7 @@ async def dispatch_stream(
     ``agent:post_respond`` after the stream is fully consumed.
     """
     await session.append_message({"role": "user", "content": input_text})
-    telemetry, bus, model, tools, system_prompt, bridge = await build_run_context(
+    telemetry, bus, model, provider, system_prompt, bridge = await build_run_context(
         agent, input_text
     )
     history = [Message(**m) for m in session.get_messages()]
@@ -131,12 +176,13 @@ async def dispatch_stream(
             _logger.info("Running agent loop for task: %s", input_text[:80])
             raw_stream = await arcrun_run_stream(
                 model=model,
-                tools=tools,
+                capabilities=provider,
                 system_prompt=system_prompt,
                 task=input_text,
                 messages=history,
                 on_event=bridge,
                 transform_context=transform,
+                actor_did=agent._identity.did if agent._identity else None,
             )
             async for event in raw_stream:
                 if isinstance(event, TurnEndEvent):

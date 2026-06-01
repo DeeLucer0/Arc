@@ -14,7 +14,7 @@ from unittest.mock import patch
 
 import pytest
 
-from arcrun import TurnEndEvent, run_stream
+from arcrun import StaticProvider, TurnEndEvent, run_stream
 from arcrun.events import Event
 from arcrun.types import LoopResult, Tool
 
@@ -63,7 +63,7 @@ async def test_run_stream_forwards_messages_bridge_and_tool_choice() -> None:
     with patch("arcrun.loop.run", side_effect=_fake_run):
         stream = await run_stream(
             model=object(),
-            tools=[_tool()],
+            capabilities=StaticProvider([_tool()]),
             system_prompt="sys",
             task="do it",
             messages=history,

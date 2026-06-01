@@ -148,6 +148,7 @@ def make_spawn_tool(
         )
 
         # Import here to avoid circular import at module level
+        from arcrun.capabilities import StaticProvider
         from arcrun.loop import run
 
         try:
@@ -155,7 +156,7 @@ def make_spawn_tool(
                 result = await asyncio.wait_for(
                     run(
                         model,
-                        child_tools,
+                        StaticProvider(child_tools),
                         child_system_prompt,
                         child_task,
                         max_turns=max_child_turns,
@@ -399,6 +400,7 @@ async def spawn(
     """
     import time
 
+    from arcrun.capabilities import StaticProvider
     from arcrun.loop import run
 
     child_run_id = str(uuid.uuid4())
@@ -495,7 +497,7 @@ async def spawn(
         loop_result = await asyncio.wait_for(
             run(
                 model,
-                tools,
+                StaticProvider(tools),
                 system_prompt,
                 full_task,
                 max_turns=max_turns,

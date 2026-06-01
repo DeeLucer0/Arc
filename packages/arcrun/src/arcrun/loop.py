@@ -112,7 +112,8 @@ async def run(
     )
 
     strategy_fn = await _select_and_emit(allowed_strategies, model, state)
-    return await strategy_fn(model, state, sandbox_obj, max_turns)
+    result: LoopResult = await strategy_fn(model, state, sandbox_obj, max_turns)
+    return result
 
 
 async def run_async(

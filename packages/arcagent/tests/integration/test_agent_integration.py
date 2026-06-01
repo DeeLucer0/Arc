@@ -171,7 +171,8 @@ class TestRunWithMockLLM:
         # The streaming loop was called with the full execution context.
         assert captured["task"] == "test integration task"
         assert captured["model"] is not None
-        assert isinstance(captured["tools"], list)
+        # arcrun now receives a CapabilityProvider, not a flat tool list.
+        assert hasattr(captured["capabilities"], "advertise")
         assert isinstance(captured["system_prompt"], str)
         assert callable(captured["on_event"])
         assert callable(captured["transform_context"])

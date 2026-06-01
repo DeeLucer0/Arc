@@ -166,7 +166,8 @@ async def run_stream(
 
     Args:
         model: LLM model for the run.
-        tools: Tools available to the agent.
+        capabilities: CapabilityProvider whose advertised specs become the
+            model's tool list; calls route to ``provider.invoke``.
         system_prompt: System prompt.
         task: User task.
         messages: Prior session history to seed the loop (history parity with

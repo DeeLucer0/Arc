@@ -100,6 +100,16 @@ class StaticProvider:
     def __init__(self, tools: list[Tool]) -> None:
         self._tools: dict[str, Tool] = {t.name: t for t in tools}
 
+    def raw_tools(self) -> list[Tool]:
+        """The wrapped Tools themselves.
+
+        ``provider_tools`` uses these directly for a StaticProvider so the loop
+        dispatches them with its live ToolContext (depth/budget/cancellation) —
+        there is no opaque trust layer to route through, so wrapping them behind
+        a context-free ``invoke`` would needlessly strip their context.
+        """
+        return list(self._tools.values())
+
     def advertise(self) -> list[CapabilitySpec]:
         return [
             CapabilitySpec(
@@ -144,13 +154,23 @@ def provider_tools(provider: CapabilityProvider, *, caller_did: str) -> list[Too
     tools — they are listed under a single built-in ``use_skill`` meta-tool that
     calls ``provider.load`` to splice the body into the next turn (lazy,
     model-driven retrieval — ADR-023). Unused skills cost ~one menu line.
+
+    A provider may expose ``raw_tools()`` for capabilities that must run with the
+    loop's live ToolContext (depth/budget/cancellation — e.g. spawn) or that have
+    no opaque trust layer to route through (StaticProvider). Those are dispatched
+    directly; everything else in ``advertise()`` routes through ``invoke``.
     """
+    raw = getattr(provider, "raw_tools", None)
+    raw_tools: list[Tool] = list(raw()) if callable(raw) else []
+    raw_names = {t.name for t in raw_tools}
+
     specs = provider.advertise()
-    tools: list[Tool] = [
+    tools: list[Tool] = list(raw_tools)
+    tools.extend(
         _invoke_tool(spec, provider, caller_did=caller_did)
         for spec in specs
-        if spec.kind != "skill"
-    ]
+        if spec.kind != "skill" and spec.name not in raw_names
+    )
     skills = [s for s in specs if s.kind == "skill"]
     if skills:
         tools.append(_use_skill_tool(skills, provider, caller_did=caller_did))
