@@ -198,8 +198,15 @@ class EventBus:
                 )
             elif event.type in _TOOL_EVENT_TYPES:
                 self._record_tool_event(event, actor_did)
-        except Exception:  # reason: fail-open (NFR-3) — telemetry never breaks the run
-            logger.warning("spool record failed for %s — swallowing (NFR-3)", event.type)
+        except Exception as exc:  # reason: fail-open (NFR-3) — telemetry never breaks the run
+            # Log the exception *type* only — never exc_info/message, which can echo
+            # a record field value (e.g. a body under store_raw_bodies) into the log
+            # (LLM02/LLM07). Type name is enough to debug a construction fault.
+            logger.warning(
+                "spool record failed for %s (%s) — swallowing (NFR-3)",
+                event.type,
+                type(exc).__name__,
+            )
 
     def _record_tool_event(self, event: Event, actor_did: str) -> None:
         """Map a ``tool.*`` event to a ``tool_event`` spool record (SPEC-028 FR-1).
