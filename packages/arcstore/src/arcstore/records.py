@@ -92,6 +92,12 @@ class SpoolRecord(BaseModel):
 
     @property
     def record_id(self) -> str:
-        """Stable, content-derived identity for idempotent ingest (FR-3)."""
-        raw = f"{self.kind}|{self.actor_did}|{self.ts}|{self.request_id}"
+        """Stable, content-derived identity for idempotent ingest (FR-3).
+
+        Includes the event discriminators ``phase`` (tool start/end/error) and
+        ``name`` (run/agent step) so two distinct events of one run under one
+        actor at the same ``ts`` do not collide and silently drop on
+        ``INSERT OR IGNORE`` (SPEC-028 review EDGE-3).
+        """
+        raw = f"{self.kind}|{self.actor_did}|{self.ts}|{self.request_id}|{self.phase}|{self.name}"
         return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]

@@ -110,3 +110,12 @@ def test_spawn_event_fields() -> None:
     assert rec.role == "researcher"
     assert rec.depth == 1
     assert rec.outcome == "ok"
+
+
+def test_record_id_distinguishes_phase_at_same_ts() -> None:
+    """EDGE-3 — tool start+end of one run at the same ts must not collide (no silent drop)."""
+    ts = "2026-05-31T00:00:00+00:00"
+    common = dict(kind="tool_event", actor_did="did:c", request_id="run-1", ts=ts, tool_name="t")
+    start = SpoolRecord(phase="start", **common)
+    end = SpoolRecord(phase="end", **common)
+    assert start.record_id != end.record_id

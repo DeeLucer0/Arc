@@ -178,24 +178,28 @@ class EventBus:
         """Mirror a lifecycle or tool event to the arcstore operational spool.
 
         Side-channel only (SPEC-026 FR-4 / SPEC-028 FR-1): gated by an actor DID
-        and itself fail-open (``record()`` swallows IO errors) so it can never
-        break the loop. ``run_event`` lifecycle markers are always recorded;
-        ``tool_event``s carry the executor-computed digests and may be sampled.
+        and fully fail-open (NFR-3) — record *construction* as well as the IO is
+        wrapped, so a malformed payload can never break the loop it observes.
+        ``run_event`` lifecycle markers are always recorded; ``tool_event``s
+        carry the executor-computed digests and may be sampled.
         """
         actor_did = self._spool_actor_did
         if actor_did is None:
             return
-        if event.type in _RUN_EVENT_TYPES:
-            _spool_record(
-                _SpoolRecord(
-                    kind="run_event",
-                    actor_did=actor_did,
-                    request_id=self._run_id,
-                    name=event.type,
+        try:
+            if event.type in _RUN_EVENT_TYPES:
+                _spool_record(
+                    _SpoolRecord(
+                        kind="run_event",
+                        actor_did=actor_did,
+                        request_id=self._run_id,
+                        name=event.type,
+                    )
                 )
-            )
-        elif event.type in _TOOL_EVENT_TYPES:
-            self._record_tool_event(event, actor_did)
+            elif event.type in _TOOL_EVENT_TYPES:
+                self._record_tool_event(event, actor_did)
+        except Exception:  # reason: fail-open (NFR-3) — telemetry never breaks the run
+            logger.warning("spool record failed for %s — swallowing (NFR-3)", event.type)
 
     def _record_tool_event(self, event: Event, actor_did: str) -> None:
         """Map a ``tool.*`` event to a ``tool_event`` spool record (SPEC-028 FR-1).
@@ -267,3 +271,12 @@ class EventBus:
     def events(self) -> list[Event]:
         with self._lock:
             return list(self._events)
+
+    @property
+    def spool_actor_did(self) -> str | None:
+        """The DID this run spools under (None when operational recording is off).
+
+        Read-only accessor so a layer above (arcagent spawn) can derive lineage
+        without reaching into a private attribute.
+        """
+        return self._spool_actor_did

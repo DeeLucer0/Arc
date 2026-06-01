@@ -118,6 +118,10 @@ async def test_tool_error_spooled() -> None:
     assert any(r.phase == "error" and r.outcome == "error" for r in tool_events)
     err = next(r for r in tool_events if r.phase == "error")
     assert err.tool_name == "bomb"
+    # Security (NFR-2): the error record still carries the args digest but never a
+    # body — the error string and arguments never reach the spool by default.
+    assert err.args_digest is not None and err.args_size is not None
+    assert err.extra == {}
 
 
 @pytest.mark.asyncio

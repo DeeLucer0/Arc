@@ -154,3 +154,34 @@ async def test_spawn_tree_query(tmp_path: Path) -> None:
         assert [g["did"] for g in c1["children"]] == ["did:gc"]
     finally:
         await observe.stop()
+
+
+async def test_spawn_tree_auto_root_and_cycle_guard(tmp_path: Path) -> None:
+    """EDGE-7 — root auto-detect (no root_did) + a mid-tree back-edge terminates."""
+    # root → a → b, plus a malformed back-edge b → a (cycle). root never appears
+    # as a child, so auto-detect resolves it; the b→a back-edge must not loop.
+    _write(tmp_path, SpoolRecord(kind="spawn_event", actor_did="did:a",
+                                 parent_did="did:root", child_did="did:a", depth=1, outcome="allow"))
+    _write(tmp_path, SpoolRecord(kind="spawn_event", actor_did="did:b",
+                                 parent_did="did:a", child_did="did:b", depth=2, outcome="allow"))
+    _write(tmp_path, SpoolRecord(kind="spawn_event", actor_did="did:a",
+                                 parent_did="did:b", child_did="did:a", depth=3, outcome="allow"))
+    observe = Observe(data_dir=tmp_path)
+    await observe.start()
+    try:
+        tree = await observe.spawn_tree()  # no root_did → auto-detect
+        assert tree["did"] == "did:root"  # the only node never seen as a child
+        seen: list[str] = []
+
+        def _walk(n: dict) -> None:
+            seen.append(n["did"])
+            for c in n["children"]:
+                _walk(c)
+
+        _walk(tree)
+        # root → a → b → a(cut as a childless leaf). Bounded; recursion terminated.
+        assert seen == ["did:root", "did:a", "did:b", "did:a"]
+        cut_leaf = tree["children"][0]["children"][0]["children"][0]
+        assert cut_leaf["did"] == "did:a" and cut_leaf["children"] == []
+    finally:
+        await observe.stop()

@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import time
 import uuid
 from collections.abc import Callable
 from typing import Any
@@ -89,9 +90,10 @@ def _parent_did(state: RunState) -> str | None:
     """The DID the parent run is spooling under (set via ``run(actor_did=...)``).
 
     None when the parent isn't recording operationally (arcstore off) — in which
-    case the child stays silent too, preserving the parent's posture.
+    case the child stays silent too, preserving the parent's posture. Reads the
+    public ``EventBus`` accessor so a rename surfaces loudly, not silently.
     """
-    return getattr(state.event_bus, "_spool_actor_did", None)
+    return state.event_bus.spool_actor_did
 
 
 def _child_label(child_did: str, role: str | None, depth: int) -> str:
@@ -464,8 +466,8 @@ async def spawn(
     Returns:
         SpawnResult with status, summary, token counts, and audit chain tip.
     """
-    import time
-
+    # arcrun imports are local to avoid a circular import at module load; time is
+    # stdlib (module-top).
     from arcrun.capabilities import StaticProvider
     from arcrun.loop import run
 

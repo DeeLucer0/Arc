@@ -56,28 +56,36 @@ def _identity(n: int = 0):
     return derive_child_identity(parent_sk_bytes=b"\xcd" * 32, spawn_id=f"obs-{n}", wallclock_timeout_s=30)
 
 
-def _telemetry_model() -> object:
-    """A real TelemetryModule wrapping a stub provider, so it spools llm_call records."""
-    from unittest.mock import AsyncMock, MagicMock
+def _telemetry_model(rendezvous: object | None = None) -> object:
+    """A real TelemetryModule wrapping a stub provider, so it spools llm_call records.
 
+    When ``rendezvous`` (an asyncio.Barrier) is supplied, every inner ``invoke``
+    waits on it — forcing concurrent children to be *simultaneously in-flight*
+    with their identity bound, which is what actually exercises the contextvar
+    isolation (a sequential mock could not catch a regression to a global race).
+    """
     from arcllm.modules.telemetry import TelemetryModule
-    from arcllm.types import LLMProvider
     from arcllm.types import LLMResponse as RealResponse
     from arcllm.types import Usage as RealUsage
 
-    inner = MagicMock(spec=LLMProvider)
-    inner.name = "stub"
-    inner.invoke = AsyncMock(
-        return_value=RealResponse(
-            content="done",
-            tool_calls=[],
-            stop_reason="end_turn",
-            model="stub-model",
-            usage=RealUsage(input_tokens=10, output_tokens=5, total_tokens=15),
-        )
+    response = RealResponse(
+        content="done",
+        tool_calls=[],
+        stop_reason="end_turn",
+        model="stub-model",
+        usage=RealUsage(input_tokens=10, output_tokens=5, total_tokens=15),
     )
+
+    class _StubProvider:  # duck-typed: TelemetryModule only needs .name + .invoke
+        name = "stub"
+
+        async def invoke(self, messages: object, tools: object = None, **kwargs: object) -> object:
+            if rendezvous is not None:
+                await rendezvous.wait()  # both children block here, identities bound
+            return response
+
     # Configured with the PARENT identity — children must override it via contextvar.
-    return TelemetryModule({"agent_did": _PARENT_DID, "agent_label": "parent"}, inner)
+    return TelemetryModule({"agent_did": _PARENT_DID, "agent_label": "parent"}, _StubProvider())
 
 
 def _capture():
@@ -125,9 +133,18 @@ async def test_child_llm_calls_separated() -> None:
 
 @pytest.mark.asyncio
 async def test_concurrent_children_not_cross_attributed() -> None:
-    """Task 3.2b (C2) — concurrent spawn_many children never cross-attribute llm_calls."""
+    """Task 3.2b (C2) — concurrent spawn_many children never cross-attribute llm_calls.
+
+    A shared asyncio.Barrier(2) gates the inner invoke so BOTH children are
+    provably in-flight with their identity bound at the same instant. If the
+    contextvar regressed to a process-global, the second child's bind would
+    clobber the first before either records → cross-attribution → this fails.
+    """
+    import asyncio
+
     parent = _parent_state()
-    model = _telemetry_model()  # shared model across both children
+    rendezvous = asyncio.Barrier(2)
+    model = _telemetry_model(rendezvous)  # shared model; both children rendezvous in invoke
     specs = [
         SpawnSpec(
             task=f"t{i}", tools=[ECHO_TOOL], system_prompt="s", parent_state=parent,
@@ -136,15 +153,18 @@ async def test_concurrent_children_not_cross_attributed() -> None:
         )
         for i in range(2)
     ]
-    child_dids = {s.child_did for s in specs}
+    child_by_label = {f"child:{s.child_did.rsplit('/', 1)[-1]}:d1": s.child_did for s in specs}
     records, patches = _capture()
     with patches[0], patches[1], patches[2]:
         await spawn_many(specs, max_concurrent=2)
     llm_calls = [r for r in records if r.kind == "llm_call"]
-    assert llm_calls
-    # Every llm_call is attributed to one of the two children — and only those.
-    assert {r.actor_did for r in llm_calls} <= child_dids
-    assert _PARENT_DID not in {r.actor_did for r in llm_calls}
+    assert len(llm_calls) == 2  # both children actually ran (and interleaved)
+    # Each child's llm_call carries ITS OWN identity — label and did agree per row.
+    for r in llm_calls:
+        assert r.actor_did != _PARENT_DID
+        assert child_by_label[r.agent_label] == r.actor_did
+    # Both distinct children represented — no collapse onto a single (clobbered) identity.
+    assert {r.actor_did for r in llm_calls} == set(child_by_label.values())
 
 
 @pytest.mark.asyncio
@@ -180,6 +200,37 @@ async def test_child_identity_degrades_safely() -> None:
     # run_events still spool under the child identity even with no llm_call separation.
     run_events = [r for r in records if r.kind == "run_event"]
     assert run_events and all(r.actor_did == identity.did for r in run_events)
+
+
+@pytest.mark.asyncio
+async def test_make_spawn_tool_records_lineage_and_child_identity() -> None:
+    """Task 3.1/3.3 — the LLM-facing spawn_task tool also tags the child run and
+    emits a spawn_event (the live path in agent_dispatch/arccli, not just spawn())."""
+    from arcrun.types import ToolContext
+
+    from arcagent.orchestration.spawn import make_spawn_tool
+
+    tool = make_spawn_tool(model=MockModel([LLMResponse(content="ok", stop_reason="end_turn")]),
+                           tools=[ECHO_TOOL], system_prompt="sys")
+    parent = _parent_state()
+    ctx = ToolContext(
+        run_id=parent.run_id, tool_call_id="tc1", turn_number=1,
+        event_bus=parent.event_bus, cancelled=parent.cancel_event, parent_state=parent,
+    )
+    records, patches = _capture()
+    with patches[0], patches[1], patches[2]:
+        out = await tool.execute({"task": "do it"}, ctx)
+    assert out  # tool returned the child result, not an error
+
+    spawn_events = [r for r in records if r.kind == "spawn_event"]
+    assert len(spawn_events) == 1
+    assert spawn_events[0].parent_did == _PARENT_DID
+    assert spawn_events[0].child_did.startswith("did:arc:spawn:child/")
+    assert spawn_events[0].depth == 1
+
+    child_did = spawn_events[0].child_did
+    run_events = [r for r in records if r.kind == "run_event"]
+    assert run_events and all(r.actor_did == child_did for r in run_events)
 
 
 def test_arcstore_off_silences_child() -> None:
