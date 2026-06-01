@@ -52,14 +52,14 @@
 
 | # | Task | Module | Pillar | Test | Done |
 |---|---|---|---|---|---|
-| 3.1 | Failing test: spawned child's `run_event`s spool under the child `actor_did` (not parent) — fix is `actor_did=child_did` at BOTH call sites (`spawn.py:156`, `spawn.py:495`) | `arcagent` | M | `tests/.../test_spawn_observability.py::test_child_run_events_tagged` | [ ] |
-| 3.2a | **(C2)** Implement contextvar identity in `arcllm.telemetry`: read `agent_did`/`agent_label` from a `ContextVar` (fallback config>global); concurrency-safe, no `set_global_defaults` | `arcllm` | M, Sc | `tests/test_telemetry.py::test_agent_identity_from_contextvar` | [ ] |
-| 3.2b | Failing test: two CONCURRENT children (`spawn_many`) get correct distinct identities — no cross-contamination | `arcagent` | Sc, Sec | `tests/.../test_spawn_observability.py::test_concurrent_children_not_cross_attributed` | [ ] |
-| 3.2 | Failing test: spawned child's `llm_call`s carry child `agent_did`/`agent_label`, distinct from parent (spawn sets the contextvar around child `run()`, capture+try/finally reset) | `arcagent` | M | `tests/.../test_spawn_observability.py::test_child_llm_calls_separated` | [ ] |
-| 3.3 | Failing test: a `spawn_event` records parent→child edge (parent_did/child_did/role/depth); spawn.py imports `arcstore.spool` | `arcagent` | Sec | `tests/.../test_spawn_observability.py::test_spawn_lineage_recorded` | [ ] |
-| 3.4 | Implement: `actor_did=child_did` into child `run()`; set telemetry contextvar around the run; emit `spawn_event`; keep `_emit_spawn_audit` (arctrust) | `arcagent` | M, Sec | 3.1–3.3 pass | [ ] |
-| 3.5 | Failing test: child re-identification failure degrades (run_events still tagged) not breaks | `arcagent` | Sec | `tests/.../test_spawn_observability.py::test_child_identity_degrades_safely` | [ ] |
-| 3.6 | Architecture test: arcrun source unchanged by spawn work; spawn stays arcagent; telemetry identity stays arcllm | `arcagent`,`arcrun` | M | `tests/.../test_layering.py::test_spawn_owned_by_arcagent` | [ ] |
+| 3.1 | Failing test: spawned child's `run_event`s spool under the child `actor_did` (not parent) — fix is `actor_did=child_did` at BOTH call sites (`spawn.py:156`, `spawn.py:495`) | `arcagent` | M | `tests/.../test_spawn_observability.py::test_child_run_events_tagged` | [x] |
+| 3.2a | **(C2)** Implement contextvar identity in `arcllm.telemetry`: read `agent_did`/`agent_label` from a `ContextVar` (fallback config>global); concurrency-safe, no `set_global_defaults` | `arcllm` | M, Sc | `tests/test_telemetry.py::test_agent_identity_from_contextvar` | [x] |
+| 3.2b | Failing test: two CONCURRENT children (`spawn_many`) get correct distinct identities — no cross-contamination | `arcagent` | Sc, Sec | `tests/.../test_spawn_observability.py::test_concurrent_children_not_cross_attributed` | [x] |
+| 3.2 | Failing test: spawned child's `llm_call`s carry child `agent_did`/`agent_label`, distinct from parent (spawn sets the contextvar around child `run()`, capture+try/finally reset) | `arcagent` | M | `tests/.../test_spawn_observability.py::test_child_llm_calls_separated` | [x] |
+| 3.3 | Failing test: a `spawn_event` records parent→child edge (parent_did/child_did/role/depth); spawn.py imports `arcstore.spool` | `arcagent` | Sec | `tests/.../test_spawn_observability.py::test_spawn_lineage_recorded` | [x] |
+| 3.4 | Implement: `actor_did=child_did` into child `run()`; set telemetry contextvar around the run; emit `spawn_event`; keep `_emit_spawn_audit` (arctrust) | `arcagent` | M, Sec | 3.1–3.3 pass | [x] |
+| 3.5 | Failing test: child re-identification failure degrades (run_events still tagged) not breaks | `arcagent` | Sec | `tests/.../test_spawn_observability.py::test_child_identity_degrades_safely` | [x] |
+| 3.6 | Architecture test: arcrun source unchanged by spawn work; spawn stays arcagent; telemetry identity stays arcllm | `arcagent`,`arcrun` | M | `tests/.../test_layering.py::test_spawn_owned_by_arcagent` | [x] |
 
 **Phase 3 acceptance:** AC-3.1–3.4 pass; gates clean.
 
