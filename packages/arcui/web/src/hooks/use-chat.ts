@@ -180,8 +180,21 @@ export function useChatSession(agentId: string | null) {
 
   const sendMessage = useCallback(
     (text: string) => {
+      if (!text.trim()) return
       const ws = wsRef.current
-      if (!ws || ws.readyState !== WebSocket.OPEN || !text.trim()) return
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        // Never drop a message silently. If the socket isn't open (the
+        // backend died, or we're mid-reconnect) the user gets explicit
+        // feedback instead of a typed message that vanishes with no reply,
+        // no LLM call, and no run.
+        append({
+          id: `sys-nosend-${Date.now()}`,
+          role: 'system',
+          text: 'Not connected — message not sent. Waiting to reconnect to the backend…',
+          time: now(),
+        })
+        return
+      }
       clientSeq.current += 1
       append({ id: `u${clientSeq.current}`, role: 'user', text, time: now() })
       ws.send(JSON.stringify({ type: 'message', text, client_seq: clientSeq.current }))

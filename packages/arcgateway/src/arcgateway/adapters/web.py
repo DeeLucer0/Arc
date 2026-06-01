@@ -134,7 +134,14 @@ class WebPlatformAdapter:
         self._socket_queues: dict[Any, asyncio.Queue[dict[str, Any]]] = {}
         self._socket_tasks: dict[Any, list[asyncio.Task[None]]] = {}
         self._last_activity: dict[Any, float] = {}
-        self._inbound_seq: dict[str, int] = {}
+        # Inbound client_seq replay guard. Keyed by the socket object so the
+        # baseline is PER-CONNECTION, not per-chat_id: a browser restarts its
+        # client_seq at 1 on every page reload, so a guard that persisted the
+        # high-water mark for the chat_id's lifetime wrongly rejected the first
+        # message after a reload as a replay (and the turn never ran). Cleaned
+        # up in unregister_socket. Legacy callers that pass no ws fall back to
+        # keying by chat_id, preserving the original single-connection contract.
+        self._inbound_seq: dict[Any, int] = {}
         # SPEC-025 Track A — outbound seq counter and replay ring per chat_id.
         # Counter starts at 0; first stamped frame gets seq=0. Ring stores
         # the most recent _REPLAY_RING_MAXLEN frames so replay_from() can
@@ -312,6 +319,9 @@ class WebPlatformAdapter:
 
         self._socket_queues.pop(ws, None)
         self._last_activity.pop(ws, None)
+        # Drop the per-connection replay-guard high-water mark so it doesn't
+        # leak for the adapter's lifetime (the old per-chat_id entry never was).
+        self._inbound_seq.pop(ws, None)
         self._n_connections = max(0, self._n_connections - 1)
 
         self._audit(
@@ -324,11 +334,19 @@ class WebPlatformAdapter:
         chat_id: str,
         text: str,
         client_seq: int | None = None,
+        ws: WebSocketLike | None = None,
     ) -> None:
         """Build an InboundEvent from a browser frame and forward it.
 
         Validation precedes any ``await`` — a malformed frame never
         reaches the SessionRouter.
+
+        ``ws`` scopes the ``client_seq`` replay guard to a single connection.
+        The route passes the originating socket so that a fresh browser
+        connection (e.g. after a page reload, where ``client_seq`` restarts at
+        1) is not wrongly rejected as a replay of a prior connection's stream.
+        When ``ws`` is None the guard falls back to per-``chat_id`` keying
+        (legacy / test contract).
         """
         if not text:
             msg = "empty text"
@@ -338,11 +356,12 @@ class WebPlatformAdapter:
             raise ValueError(msg)
 
         if client_seq is not None:
-            last = self._inbound_seq.get(chat_id, -1)
+            seq_key: Any = ws if ws is not None else chat_id
+            last = self._inbound_seq.get(seq_key, -1)
             if client_seq <= last:
                 msg = "replay"
                 raise ValueError(msg)
-            self._inbound_seq[chat_id] = client_seq
+            self._inbound_seq[seq_key] = client_seq
 
         meta = self._meta_for_chat_id(chat_id)
         if meta is None:

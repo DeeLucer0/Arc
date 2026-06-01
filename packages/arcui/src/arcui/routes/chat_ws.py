@@ -192,6 +192,7 @@ async def chat_ws_endpoint(ws: WebSocket) -> None:
                     chat_id,
                     frame.get("text", ""),
                     client_seq=frame.get("client_seq"),
+                    ws=ws,
                 )
             except ValueError as exc:
                 await ws.send_json({"type": "error", "code": "malformed", "message": str(exc)})

@@ -198,6 +198,44 @@ async def test_ingest_builds_correct_inbound_event() -> None:
     await adapter.disconnect()
 
 
+async def test_client_seq_resets_per_connection() -> None:
+    """A reconnect (new socket, same chat_id) restarts the client_seq baseline.
+
+    Regression for the multi-turn-after-refresh bug: the browser's client_seq
+    counter resets to 1 on every page reload, but the server used to retain the
+    highest seq per chat_id for the adapter's whole lifetime — so the first
+    message after a reload was wrongly rejected as a replay and never ran.
+
+    The replay guard is per-connection: monotonic within a single socket,
+    fresh on each new socket.
+    """
+    received: list[InboundEvent] = []
+
+    async def capture(event: InboundEvent) -> None:
+        received.append(event)
+
+    adapter = _make_adapter(on_message=capture)
+
+    # Connection A — send a couple of turns; seq advances to 2.
+    ws_a = FakeWebSocket()
+    adapter.register_socket(ws_a, "did:arc:agent:a", "did:arc:viewer:u", "chat-1")
+    await adapter.ingest("chat-1", "turn one", client_seq=1, ws=ws_a)
+    await adapter.ingest("chat-1", "turn two", client_seq=2, ws=ws_a)
+    # Replay within the same connection is still rejected.
+    with pytest.raises(ValueError):
+        await adapter.ingest("chat-1", "dup", client_seq=2, ws=ws_a)
+    adapter.unregister_socket(ws_a)
+
+    # Connection B — simulates a page reload: client_seq restarts at 1.
+    ws_b = FakeWebSocket()
+    adapter.register_socket(ws_b, "did:arc:agent:a", "did:arc:viewer:u", "chat-1")
+    # Must be ACCEPTED, not rejected as a replay.
+    await adapter.ingest("chat-1", "after reload", client_seq=1, ws=ws_b)
+
+    assert [e.message for e in received] == ["turn one", "turn two", "after reload"]
+    await adapter.disconnect()
+
+
 async def test_ingest_empty_text_rejected() -> None:
     adapter = _make_adapter()
     ws = FakeWebSocket()
