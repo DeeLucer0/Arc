@@ -70,8 +70,16 @@ class StreamBridge:
         message_id: str | None = None
         edit_count: int = 0
 
-        await self._maybe_send_typing(adapter, target)
-        message_id = await self._send_placeholder(adapter, target)
+        # Progressive in-place editing is only possible when the adapter exposes
+        # edit_message (Telegram, Slack). Send-only transports (web, in-process)
+        # skip the placeholder and receive a single final message — sending a
+        # placeholder we can never edit would leave a dangling "thinking…" bubble
+        # beside the real reply (the duplicate-message bug).
+        supports_edit = hasattr(adapter, "edit_message")
+        if supports_edit:
+            await self._maybe_send_typing(adapter, target)
+            message_id = await self._send_placeholder(adapter, target)
+        can_edit = supports_edit and message_id is not None
 
         async for delta in deltas:
             if delta.is_final:
@@ -84,8 +92,10 @@ class StreamBridge:
             buffer.append(delta.content)
             accumulated_parts.append(delta.content)
 
-            should_flush = self._should_flush_now(buffer, last_edit_at)
-            if should_flush and not flood_disabled and message_id is not None:
+            if not can_edit or flood_disabled or message_id is None:
+                continue
+
+            if self._should_flush_now(buffer, last_edit_at):
                 accumulated = "".join(accumulated_parts)
                 success = await self._attempt_edit(adapter, target, message_id, accumulated)
                 if success:
@@ -125,10 +135,14 @@ class StreamBridge:
                 },
             )
 
-        if accumulated:
-            await self._send_final(adapter, target, accumulated)
-        else:
-            _logger.debug("StreamBridge: no content to deliver (target=%s)", target)
+        await self._deliver_final(
+            adapter,
+            target,
+            accumulated,
+            message_id=message_id,
+            can_edit=can_edit and not flood_disabled,
+            pending=bool(buffer),
+        )
 
     def _should_flush_now(self, buffer: list[str], last_edit_at: float) -> bool:
         if len(buffer) == 0:
@@ -198,6 +212,64 @@ class StreamBridge:
             )
             return False
 
+    async def _deliver_final(
+        self,
+        adapter: object,
+        target: DeliveryTarget,
+        text: str,
+        *,
+        message_id: str | None,
+        can_edit: bool,
+        pending: bool,
+    ) -> None:
+        """Deliver the completed turn exactly once.
+
+        Edit-capable channels finalize the streamed placeholder in place — never
+        a duplicate message. When the reply exceeds the platform's single-message
+        limit, the placeholder is edited to the first chunk and the remaining
+        chunks are sent as follow-up messages, so long replies split instead of
+        truncating. Send-only channels, flood fallback, or a failed final edit
+        fall through to a single ``send`` (the adapter splits internally).
+        """
+        if not text:
+            _logger.debug("StreamBridge: no content to deliver (target=%s)", target)
+            return
+
+        if can_edit and message_id is not None:
+            chunks = _split_for_platform(adapter, text)
+            if await self._finalize_in_place(adapter, target, message_id, chunks, pending=pending):
+                _audit(
+                    "gateway.message.final_sent",
+                    {"target": str(target), "text_len": len(text), "chunks": len(chunks)},
+                )
+                return
+
+        await self._send_final(adapter, target, text)
+
+    async def _finalize_in_place(
+        self,
+        adapter: object,
+        target: DeliveryTarget,
+        message_id: str,
+        chunks: list[str],
+        *,
+        pending: bool,
+    ) -> bool:
+        """Complete the streamed message in place; return False to fall back to send.
+
+        Single-chunk replies already shown by the last streaming edit need no
+        further work. Otherwise the placeholder is edited to ``chunks[0]`` and any
+        overflow chunks are delivered as new messages — never re-sending the first
+        chunk, so the reply is never duplicated.
+        """
+        if len(chunks) == 1 and not pending:
+            return True
+        if not await self._attempt_edit(adapter, target, message_id, chunks[0]):
+            return False
+        for chunk in chunks[1:]:
+            await adapter.send(target, chunk)  # type: ignore[attr-defined]  # reason: adapter is a duck-typed platform adapter; send is part of the minimum contract
+        return True
+
     @staticmethod
     async def _send_final(adapter: object, target: DeliveryTarget, text: str) -> None:
         try:
@@ -209,6 +281,23 @@ class StreamBridge:
         except Exception as exc:  # reason: re-raise after log
             _logger.error("StreamBridge: final send failed (target=%s): %s", target, exc)
             raise
+
+
+def _split_for_platform(adapter: object, text: str) -> list[str]:
+    """Split ``text`` into platform-sized chunks via the adapter's ``split_message``.
+
+    Length-limited adapters (Telegram, Slack) expose ``split_message(text)`` so the
+    bridge can chunk a long reply for in-place finalization without hard-coding any
+    platform limit. Adapters that omit it (or return a non-list, e.g. test mocks)
+    fall back to a single chunk — the adapter's own ``edit_message``/``send`` then
+    applies whatever limit it enforces.
+    """
+    splitter = getattr(adapter, "split_message", None)
+    if callable(splitter):
+        chunks = splitter(text)
+        if isinstance(chunks, list) and chunks and all(isinstance(c, str) for c in chunks):
+            return chunks
+    return [text]
 
 
 def _audit(event_name: str, data: dict[str, object]) -> None:

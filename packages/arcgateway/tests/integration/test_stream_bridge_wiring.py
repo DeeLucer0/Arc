@@ -109,7 +109,11 @@ async def test_stream_bridge_calls_send_placeholder() -> None:
 
 @pytest.mark.asyncio
 async def test_stream_bridge_sends_final_message() -> None:
-    """StreamBridge sends the complete accumulated text at turn end."""
+    """StreamBridge delivers the complete accumulated text at turn end.
+
+    For an edit-capable adapter the full text lands via a final in-place edit
+    of the placeholder, not a duplicate `send`.
+    """
     adapter = _MockAdapter()
     target = DeliveryTarget.parse("telegram:12345")
     bridge = StreamBridge()
@@ -121,10 +125,12 @@ async def test_stream_bridge_sends_final_message() -> None:
 
     await bridge.consume(_stream(), target, adapter)
 
-    # The last send must contain the accumulated text.
-    final_texts = [msg for _, msg in adapter.sent_messages]
-    assert any("hello" in t and "world" in t for t in final_texts), (
-        f"Expected final send with 'hello world', got: {final_texts}"
+    # Only the placeholder was sent — no duplicate final send.
+    assert [msg for _, msg in adapter.sent_messages] == ["..."]
+    # The full accumulated text was delivered via the final edit.
+    final_edits = [text for _, _, text in adapter.edited_messages]
+    assert any("hello" in t and "world" in t for t in final_edits), (
+        f"Expected final edit with 'hello world', got: {final_edits}"
     )
 
 
