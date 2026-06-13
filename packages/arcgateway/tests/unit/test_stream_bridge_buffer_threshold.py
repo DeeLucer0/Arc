@@ -62,14 +62,109 @@ async def test_default_mode_batches_tokens() -> None:
     target = DeliveryTarget(platform="python", chat_id="abc", thread_id=None)
 
     # Only a handful of tokens — well under the default 20-token threshold
-    # AND too quick to hit the 1.5s elapsed-time flush. No edits expected;
-    # the final-send delivers the whole content.
+    # AND too quick to hit the 1.5s elapsed-time flush. No mid-stream edits;
+    # the whole content is delivered by a single final in-place edit of the
+    # placeholder (NOT a second `send`, which would duplicate the reply).
     await bridge.consume(_stream(["he", "llo", "!"]), target, adapter)
 
     edits = [text for kind, text in adapter.events if kind == "edit"]
     sends = [text for kind, text in adapter.events if kind == "send"]
-    assert edits == []
-    assert sends == ["hello!"]
+    assert edits == ["hello!"]
+    assert sends == []
+
+
+@pytest.mark.asyncio
+async def test_editable_adapter_finalizes_in_place_no_duplicate() -> None:
+    """Edit-capable adapters must NOT receive a second `send` for the final text.
+
+    Regression for the Telegram double-reply bug: the bridge streamed
+    progressive edits into the placeholder AND then sent a brand-new message
+    with the same text, so every reply appeared twice. The final delivery
+    must be an in-place edit, never a duplicate send.
+    """
+    bridge = StreamBridge()  # default threshold — short stream, no mid-stream flush
+    adapter = _RecordingAdapter()
+    target = DeliveryTarget(platform="telegram", chat_id="42", thread_id=None)
+
+    await bridge.consume(_stream(["he", "llo", "!"]), target, adapter)
+
+    sends = [text for kind, text in adapter.events if kind == "send"]
+    edits = [text for kind, text in adapter.events if kind == "edit"]
+    assert sends == [], f"final text must be edited in place, not re-sent; got sends={sends}"
+    assert edits[-1] == "hello!", f"final edit must carry the full text; got {edits}"
+
+
+class _SendOnlyAdapter:
+    """Adapter with no edit_message — models web / in-process transports."""
+
+    def __init__(self) -> None:
+        self.events: list[tuple[str, str]] = []
+
+    async def send(self, target, message, *, reply_to=None) -> None:  # type: ignore[no-untyped-def]
+        self.events.append(("send", message))
+
+    async def send_with_id(self, target, message) -> str | None:  # type: ignore[no-untyped-def]
+        self.events.append(("send_with_id", message))
+        return None
+
+
+@pytest.mark.asyncio
+async def test_send_only_adapter_skips_placeholder_single_message() -> None:
+    """Send-only adapters get exactly one message and no dangling placeholder."""
+    bridge = StreamBridge()
+    adapter = _SendOnlyAdapter()
+    target = DeliveryTarget(platform="web", chat_id="abc", thread_id=None)
+
+    await bridge.consume(_stream(["he", "llo", "!"]), target, adapter)
+
+    assert adapter.events == [("send", "hello!")], (
+        f"expected a single final send and no placeholder; got {adapter.events}"
+    )
+
+
+class _SplittingAdapter:
+    """Edit-capable adapter with a small per-message limit, like Telegram/Slack."""
+
+    LIMIT = 10
+
+    def __init__(self) -> None:
+        self.events: list[tuple[str, str]] = []
+
+    async def send(self, target, message, *, reply_to=None) -> None:  # type: ignore[no-untyped-def]
+        self.events.append(("send", message))
+
+    async def send_with_id(self, target, message) -> str:  # type: ignore[no-untyped-def]
+        self.events.append(("send_with_id", message))
+        return "mid-1"
+
+    async def edit_message(self, target, message_id, text) -> None:  # type: ignore[no-untyped-def]
+        self.events.append(("edit", text))
+
+    def split_message(self, text: str) -> list[str]:
+        return [text[i : i + self.LIMIT] for i in range(0, len(text), self.LIMIT)] or [text]
+
+
+@pytest.mark.asyncio
+async def test_long_reply_splits_first_chunk_edited_rest_sent() -> None:
+    """A reply over the platform limit edits chunk 1 in place and sends the rest.
+
+    No chunk is duplicated: chunk 0 lands via edit_message, chunks 1..n via send.
+    """
+    bridge = StreamBridge()
+    adapter = _SplittingAdapter()
+    target = DeliveryTarget(platform="telegram", chat_id="42", thread_id=None)
+
+    # 25 chars → 3 chunks of 10/10/5 under the adapter's LIMIT of 10.
+    full = "ABCDEFGHIJKLMNOPQRSTUVWXY"
+    await bridge.consume(_stream([full]), target, adapter)
+
+    edits = [text for kind, text in adapter.events if kind == "edit"]
+    sends = [text for kind, text in adapter.events if kind == "send"]
+    assert edits == ["ABCDEFGHIJ"], f"first chunk must be edited in place; got {edits}"
+    assert sends == ["KLMNOPQRST", "UVWXY"], f"overflow chunks must be sent; got {sends}"
+    # Reassembled, the delivered text is exactly the reply — nothing dropped.
+    assert (edits + sends) == ["ABCDEFGHIJ", "KLMNOPQRST", "UVWXY"]
+    assert "".join(edits + sends) == full
 
 
 def test_negative_threshold_rejected() -> None:
