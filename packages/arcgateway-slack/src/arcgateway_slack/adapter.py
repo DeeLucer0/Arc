@@ -287,6 +287,16 @@ class SlackAdapter:
         )
         return ts
 
+    @staticmethod
+    def split_message(text: str) -> list[str]:
+        """Split ``text`` into Slack-sized chunks at natural boundaries.
+
+        StreamBridge calls this to finalize a long streamed reply: the first
+        chunk replaces the placeholder via edit_message and the rest are sent as
+        follow-up messages, so long replies split instead of truncate.
+        """
+        return split_message(text, _MAX_MESSAGE_LENGTH)
+
     async def edit_message(
         self,
         target: DeliveryTarget,

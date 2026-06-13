@@ -422,6 +422,16 @@ class TelegramAdapter:
         )
 
     @staticmethod
+    def split_message(text: str) -> list[str]:
+        """Split ``text`` into Telegram-sized chunks at natural boundaries.
+
+        StreamBridge calls this to finalize a long streamed reply: the first
+        chunk replaces the placeholder via edit_message and the rest are sent as
+        follow-up messages, so replies over 4096 chars split instead of truncate.
+        """
+        return split_message(text)
+
+    @staticmethod
     def _resolve_chat_id(chat_id_str: str) -> int | str:
         """Telegram chat ids are numeric; fall back to the raw string (@channel)."""
         try:

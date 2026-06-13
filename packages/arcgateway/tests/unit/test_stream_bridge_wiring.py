@@ -147,7 +147,11 @@ async def test_turn_summary_shape() -> None:
 
 
 async def test_accumulated_string_is_correct() -> None:
-    """The full text delivered via final send must be the join of all tokens."""
+    """The full text delivered via the final in-place edit is the join of all tokens.
+
+    Edit-capable adapters finalize by editing the placeholder — never a second
+    `send`, which would duplicate the reply.
+    """
     bridge = StreamBridge()
     adapter = _make_adapter()
     target = _target()
@@ -159,8 +163,9 @@ async def test_accumulated_string_is_correct() -> None:
         await bridge.consume(_stream(*tokens), target, adapter)
 
     expected = "".join(words)
-    adapter.send.assert_called_once()
-    actual_text = adapter.send.call_args.args[1]
+    adapter.send.assert_not_called()
+    adapter.edit_message.assert_awaited()
+    actual_text = adapter.edit_message.await_args.args[2]
     assert actual_text == expected, f"Expected {expected!r}, got {actual_text!r}"
 
 
