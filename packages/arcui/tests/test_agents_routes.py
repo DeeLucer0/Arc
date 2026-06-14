@@ -60,7 +60,7 @@ def _build_team_dir(tmp_path: Path) -> Path:
               pulse.md
               tasks.json
               schedules.json
-              skills/skill_a.md
+              capabilities/skills/skill_a/SKILL.md
               sessions/session-001.jsonl
     """
     root = tmp_path / "team"
@@ -107,9 +107,11 @@ def _build_team_dir(tmp_path: Path) -> Path:
         '[{"id": "sched1", "cron": "0 * * * *", "action": "ping"}]',
         encoding="utf-8",
     )
-    skills = ws / "skills"
-    skills.mkdir()
-    (skills / "skill_a.md").write_text(
+    # Loader convention: skills are SKILL.md folders under the skills/ subdir
+    # of a capabilities root (here, workspace/capabilities/skills/<name>/).
+    skill_a = ws / "capabilities" / "skills" / "skill_a"
+    skill_a.mkdir(parents=True)
+    (skill_a / "SKILL.md").write_text(
         "---\nname: skill_a\ndescription: example skill\nversion: 1\n---\n# Body\nDoit.\n",
         encoding="utf-8",
     )
@@ -358,7 +360,7 @@ class TestFilesTreeRoute:
         assert resp.status_code == 200
         paths = {e["path"] for e in resp.json()["entries"]}
         assert "policy.md" in paths
-        assert "skills" in paths
+        assert "capabilities" in paths
         assert "sessions" in paths
 
     def test_agent_root_lists_arcagent_toml(self, tmp_path):

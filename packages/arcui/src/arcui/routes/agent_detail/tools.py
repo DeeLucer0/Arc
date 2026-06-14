@@ -15,19 +15,25 @@ from starlette.responses import JSONResponse
 from arcui.routes.agent_detail._common import _CALLER_DID, _agent_root
 from arcui.schemas import ErrorResponse, ToolsResponse
 
-_BUILTIN_TOOLS: tuple[tuple[str, str, str], ...] = (
-    ("read", "read_only", "Read a file from disk and return its text content."),
-    ("write", "state_modifying", "Write content to a file (creates or overwrites)."),
-    ("edit", "state_modifying", "Edit a file in place via search/replace patch."),
-    ("bash", "external_effect", "Execute a shell command in the agent workspace."),
-    ("find", "read_only", "Find files by name or glob."),
-    ("grep", "read_only", "Search file contents by regex."),
-    ("ls", "read_only", "List directory contents."),
-)
-# Capture name + every keyword argument across the (...) block.
+# Classification fallbacks for builtin tools whose source omits the kwarg.
+# The loader reads these from the @tool decorator; the few that don't set
+# ``classification`` get a sensible default here so the UI isn't blank.
+_BUILTIN_CLASSIFICATION: dict[str, str] = {
+    "read": "read_only",
+    "find": "read_only",
+    "grep": "read_only",
+    "ls": "read_only",
+    "write": "state_modifying",
+    "edit": "state_modifying",
+    "bash": "external_effect",
+}
+# Capture name + every keyword argument across the (...) block. The body is
+# matched non-greedily and anchored on the ``)`` + ``def`` terminator, so a
+# literal ``@`` inside a description (e.g. "Author a new @tool file") does not
+# truncate the match.
 _TOOL_BLOCK_RE = re.compile(
-    r"@tool\s*\(\s*(?P<body>[^@]*?)\)\s*\n\s*async\s+def|"
-    r"@tool\s*\(\s*(?P<body2>[^@]*?)\)\s*\n\s*def",
+    r"@tool\s*\(\s*(?P<body>.*?)\)\s*\n\s*async\s+def|"
+    r"@tool\s*\(\s*(?P<body2>.*?)\)\s*\n\s*def",
     re.DOTALL,
 )
 # Capability tools use ToolMetadata(...) assignment instead of @tool().
@@ -40,9 +46,8 @@ _KW_CLASS_RE = re.compile(r'classification\s*=\s*["\']([^"\']+)["\']')
 _KW_DESC_RE = re.compile(r'description\s*=\s*(?P<q>["\']{1,3})(?P<text>.+?)(?P=q)', re.DOTALL)
 
 
-def _arcagent_modules_dir() -> Path:
-    """Locate ``arcagent/modules/`` on disk so we can scan capabilities files
-    for `@tool(...)` declarations without importing the package.
+def _arcagent_pkg_dir() -> Path | None:
+    """Locate the installed ``arcagent`` package directory on disk.
 
     Uses ``importlib.util.find_spec`` rather than ``import arcagent`` so this
     module preserves the SPEC-023 §2.2 boundary that arcui does not import
@@ -54,9 +59,19 @@ def _arcagent_modules_dir() -> Path:
     try:
         spec = importlib.util.find_spec("arcagent")
         if spec is not None and spec.origin is not None:
-            return Path(spec.origin).parent / "modules"
+            return Path(spec.origin).parent
     except (ImportError, ValueError):
         pass
+    return None
+
+
+def _arcagent_modules_dir() -> Path:
+    """Locate ``arcagent/modules/`` on disk so we can scan capabilities files
+    for `@tool(...)` declarations.
+    """
+    pkg = _arcagent_pkg_dir()
+    if pkg is not None:
+        return pkg / "modules"
     return Path(__file__).resolve().parents[5] / "arcagent/src/arcagent/modules"
 
 
@@ -126,6 +141,45 @@ def _collect_module_tools(modules: dict[str, Any]) -> list[dict[str, str]]:
     return out
 
 
+def _collect_builtin_tools() -> list[dict[str, str]]:
+    """Scan the arcagent builtins capabilities dir for `@tool(...)` files.
+
+    Mirrors the loader's first scan root (``builtins/capabilities/*.py``) so the
+    UI surfaces every builtin tool — read/write/edit/bash/find/grep/ls/reload
+    plus the self-modification tools (create_tool, create_skill, update_tool,
+    update_skill) — instead of a hand-maintained subset that drifts.
+
+    Falls back to the static classification map when a builtin's source omits
+    the ``classification`` kwarg.
+    """
+    out: list[dict[str, str]] = []
+    pkg = _arcagent_pkg_dir()
+    if pkg is None:
+        return out
+    builtins_dir = pkg / "builtins" / "capabilities"
+    if not builtins_dir.is_dir():
+        return out
+    for child in sorted(builtins_dir.glob("*.py")):
+        if child.name.startswith("_"):
+            continue
+        try:
+            text = child.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for row in _parse_tool_blocks(text):
+            name = row["name"]
+            out.append(
+                {
+                    "name": name,
+                    "transport": "builtin",
+                    "classification": row.get("classification")
+                    or _BUILTIN_CLASSIFICATION.get(name, ""),
+                    "description": row.get("description") or "",
+                }
+            )
+    return out
+
+
 def _collect_disk_tools(agent_root: Path) -> list[dict[str, str]]:
     """Scan agent-local + workspace tool directories for .py modules and
     parse `@tool(...)` blocks for name/classification/description metadata.
@@ -135,15 +189,18 @@ def _collect_disk_tools(agent_root: Path) -> list[dict[str, str]]:
     Agent-created tools that DO use the decorator inherit the same
     classification surface as built-in/module tools.
 
-    Locations checked (each optional):
+    Locations checked (each optional), mirroring the loader's tool roots:
+      - ~/.arc/capabilities/*.py                 (global, operator-curated)
       - team/<agent>/tools/*.py                  (agent-shipped Python tools)
       - team/<agent>/workspace/tools/*.py        (agent-authored runtime tools)
       - team/<agent>/extensions/*                (extension modules)
-      - team/<agent>/capabilities/*.py           (operator-curated capabilities)
+      - team/<agent>/capabilities/*.py           (per-agent capabilities)
       - team/<agent>/workspace/capabilities/*.py (agent-authored at runtime)
     """
     out: list[dict[str, str]] = []
     candidates: list[tuple[Path, str]] = [
+        # Global capabilities root — the loader scans ~/.arc/capabilities/.
+        (Path.home() / ".arc" / "capabilities", "global"),
         (agent_root / "tools", "agent_dir"),
         (agent_root / "workspace" / "tools", "workspace"),
         (agent_root / "extensions", "extension"),
@@ -191,16 +248,9 @@ def _collect_disk_tools(agent_root: Path) -> list[dict[str, str]]:
                             "description": "",
                         }
                     )
-            elif child.is_dir():
-                # Capability folder convention — name comes from the dir.
-                out.append(
-                    {
-                        "name": child.name,
-                        "transport": transport,
-                        "classification": "",
-                        "description": "",
-                    }
-                )
+            # Subdirs are NOT tools. The loader treats a capabilities subdir as a
+            # skill (when it holds a SKILL.md) or ignores it — never as a tool.
+            # ``skills/`` and each authored skill folder must not leak in here.
     return out
 
 
@@ -267,8 +317,13 @@ async def get_tools(request: Request) -> JSONResponse:
 
     for t in live_tools:
         _add(t, transport="registered")
-    for name, classification, description in _BUILTIN_TOOLS:
-        _add(name, transport="builtin", classification=classification, description=description)
+    for row in _collect_builtin_tools():
+        _add(
+            row["name"],
+            transport="builtin",
+            classification=row.get("classification") or "",
+            description=row.get("description") or "",
+        )
     for row in _collect_module_tools(enabled_modules):
         _add(
             row["name"],
