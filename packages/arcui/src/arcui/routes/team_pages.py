@@ -32,7 +32,7 @@ from starlette.routing import Route
 
 from arcui.query_validators import safe_int
 from arcui.routes.agent_detail.skills import discover_skills
-from arcui.routes.agent_detail.tools import _BUILTIN_TOOLS
+from arcui.routes.agent_detail.tools import _BUILTIN_CLASSIFICATION
 from arcui.schemas import (
     AuditEventsResponse,
     PolicyBulletsResponse,
@@ -48,7 +48,7 @@ _CALLER_DID = "did:arc:ui:viewer"
 # Effect classification for the built-in tool surface, so the fleet matrix can
 # show read-only / write / external without a per-agent scan. Agent- and
 # module-supplied tools surface full classification on the agent Tools tab.
-_BUILTIN_CLASS: dict[str, str] = {name: cls for name, cls, _desc in _BUILTIN_TOOLS}
+_BUILTIN_CLASS: dict[str, str] = dict(_BUILTIN_CLASSIFICATION)
 
 # Default path for the per-agent connect-state file written by arc-stack.sh.
 _AGENT_STATE_FILE = Path.home() / ".arcagent" / "agent-state.json"
