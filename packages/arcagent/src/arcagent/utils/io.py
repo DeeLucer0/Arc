@@ -56,18 +56,65 @@ def format_messages(
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*\n(.*?)\n```", re.DOTALL)
 
 
-def extract_json(text: str | None) -> str:
-    """Extract JSON from an LLM response that may be wrapped in markdown fences.
+def _balanced_block(text: str, open_ch: str, close_ch: str) -> str | None:
+    """Return the first string-aware balanced ``open_ch..close_ch`` block, or None.
 
-    LLMs often return JSON inside ```json ... ``` blocks. This strips
-    the fences so json.loads() can parse the content.
+    Tracks JSON string state so braces inside string values don't unbalance the
+    scan. Used to recover a JSON object/array embedded in surrounding prose.
+    """
+    start = text.find(open_ch)
+    if start == -1:
+        return None
+    depth = 0
+    in_str = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_str:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == open_ch:
+            depth += 1
+        elif ch == close_ch:
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return None
+
+
+def extract_json(text: str | None) -> str:
+    """Extract JSON from an LLM response that may be wrapped in prose or fences.
+
+    Handles three shapes, in order:
+    1. A ```json ... ``` (or bare ```) fenced block — return its contents.
+    2. A response that already starts with ``{`` or ``[`` — return as-is.
+    3. A JSON object/array embedded in surrounding prose ("Here's the delta: {…}")
+       — recover the first balanced block so ``json.loads`` succeeds instead of
+       silently failing. Models often add a preamble despite "respond ONLY with
+       JSON", which previously broke every reflection/extraction caller.
     """
     if not text:
         return ""
     match = _JSON_FENCE_RE.search(text)
     if match:
         return match.group(1).strip()
-    return text.strip()
+    stripped = text.strip()
+    if not stripped or stripped[0] in "{[":
+        return stripped
+    obj = _balanced_block(stripped, "{", "}")
+    arr = _balanced_block(stripped, "[", "]")
+    candidates = [c for c in (obj, arr) if c is not None]
+    if candidates:
+        # Whichever balanced block appears earliest in the prose.
+        return min(candidates, key=stripped.find)
+    return stripped
 
 
 def sanitize_fts5_query(query: str) -> str:

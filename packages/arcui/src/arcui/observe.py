@@ -12,6 +12,7 @@ there is no separate rolling aggregator to keep in sync.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -44,10 +45,25 @@ def _window_cutoff(window: str) -> str:
 
 
 def _row_to_trace(row: dict[str, Any]) -> dict[str, Any]:
-    """Map an arcstore ``llm_calls`` row to the UI trace shape."""
+    """Map an arcstore ``llm_calls`` row to the UI trace shape.
+
+    When raw capture is enabled (``store_raw_bodies``), the producer parks the
+    request/response payloads in ``extra``; surface them as ``request`` /
+    ``response`` / ``messages`` so the drawer shows the actual call. They are
+    absent (metadata-only) under the federal/CUI default — the UI handles that.
+    """
     prompt = row.get("prompt_tokens") or 0
     completion = row.get("completion_tokens") or 0
     outcome = row.get("outcome")
+    extra = row.get("extra")
+    if isinstance(extra, str):
+        try:
+            extra = json.loads(extra)
+        except (json.JSONDecodeError, TypeError):
+            extra = None
+    extra = extra if isinstance(extra, dict) else {}
+    request_body = extra.get("request_body")
+    response_body = extra.get("response_body")
     return {
         "trace_id": row.get("record_id"),
         "timestamp": row.get("ts"),
@@ -63,6 +79,10 @@ def _row_to_trace(row: dict[str, Any]) -> dict[str, Any]:
         "output_tokens": row.get("completion_tokens"),
         "total_tokens": prompt + completion,
         "request_id": row.get("request_id"),
+        "request": request_body,
+        "response": response_body,
+        "messages": (request_body or {}).get("messages"),
+        "tools": (request_body or {}).get("tools"),
     }
 
 
