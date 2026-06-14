@@ -370,3 +370,47 @@ async def test_spawn_tree_auto_root_and_cycle_guard(tmp_path: Path) -> None:
         assert cut_leaf["did"] == "did:a" and cut_leaf["children"] == []
     finally:
         await observe.stop()
+
+
+def test_row_to_trace_surfaces_bodies_from_extra() -> None:
+    """When raw capture is on, request/response payloads in extra are surfaced."""
+    from arcui.observe import _row_to_trace
+
+    row = {
+        "record_id": "r1",
+        "model": "claude-sonnet-4-6",
+        "outcome": "ok",
+        "extra": {
+            "request_body": {"messages": [{"role": "user", "content": "hi"}]},
+            "response_body": {"content": "hello"},
+        },
+    }
+    trace = _row_to_trace(row)
+    assert trace["request"]["messages"][0]["content"] == "hi"
+    assert trace["response"]["content"] == "hello"
+    assert trace["messages"][0]["content"] == "hi"
+
+
+def test_row_to_trace_handles_json_string_extra() -> None:
+    """extra may arrive as a JSON string depending on the backend read path."""
+    import json as _json
+
+    from arcui.observe import _row_to_trace
+
+    row = {
+        "record_id": "r2",
+        "outcome": "ok",
+        "extra": _json.dumps({"response_body": {"content": "hey"}}),
+    }
+    trace = _row_to_trace(row)
+    assert trace["response"]["content"] == "hey"
+
+
+def test_row_to_trace_metadata_only_has_no_bodies() -> None:
+    """Default (no raw capture): request/response are None, nothing breaks."""
+    from arcui.observe import _row_to_trace
+
+    trace = _row_to_trace({"record_id": "r3", "outcome": "ok"})
+    assert trace["request"] is None
+    assert trace["response"] is None
+    assert trace["messages"] is None

@@ -393,6 +393,42 @@ class TelemetryModule(BaseModule):
             "alert_threshold_pct": self._alert_pct,
         }
 
+    def _raw_bodies(
+        self,
+        messages: list[Message],
+        tools: list[Tool] | None,
+        kwargs: dict[str, Any],
+        response: LLMResponse | None,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+        """Build (request_body, response_body) when raw capture is enabled.
+
+        Returns ``(None, None)`` when ``store_raw_bodies`` is off (the federal/
+        CUI default). ``response_body`` is ``None`` when there is no response
+        (the error path). Shared by the trace_store record and the arcstore
+        spool so both carry identical payloads (DRY).
+        """
+        if not self._store_raw_bodies:
+            return None, None
+
+        # Internal keys injected by upstream modules (RetryModule, QueueModule)
+        _internal_keys = {"_retry_attempt", "_retry_group_id", "_queue_wait_ms"}
+        request_body: dict[str, Any] = {
+            "messages": [m.model_dump() for m in messages],
+            "tools": [t.model_dump() for t in tools] if tools else None,
+            **{k: v for k, v in kwargs.items() if k != "max_tokens" and k not in _internal_keys},
+        }
+        if kwargs.get("max_tokens") is not None:
+            request_body["max_tokens"] = kwargs["max_tokens"]
+
+        response_body: dict[str, Any] | None = None
+        if response is not None:
+            response_body = {
+                "content": response.content,
+                "tool_calls": [tc.model_dump() for tc in response.tool_calls],
+                "stop_reason": response.stop_reason,
+            }
+        return request_body, response_body
+
     def _build_trace_record(
         self,
         response: LLMResponse,
@@ -405,30 +441,7 @@ class TelemetryModule(BaseModule):
         error: str | None = None,
     ) -> TraceRecord:
         """Build a TraceRecord from invoke() data."""
-        request_body: dict[str, Any] | None = None
-        response_body: dict[str, Any] | None = None
-
-        # Internal keys injected by upstream modules (RetryModule, QueueModule)
-        _internal_keys = {"_retry_attempt", "_retry_group_id", "_queue_wait_ms"}
-
-        if self._store_raw_bodies:
-            request_body = {
-                "messages": [m.model_dump() for m in messages],
-                "tools": [t.model_dump() for t in tools] if tools else None,
-                **{
-                    k: v
-                    for k, v in kwargs.items()
-                    if k != "max_tokens" and k not in _internal_keys
-                },
-            }
-            if kwargs.get("max_tokens") is not None:
-                request_body["max_tokens"] = kwargs["max_tokens"]
-
-            response_body = {
-                "content": response.content,
-                "tool_calls": [tc.model_dump() for tc in response.tool_calls],
-                "stop_reason": response.stop_reason,
-            }
+        request_body, response_body = self._raw_bodies(messages, tools, kwargs, response)
 
         # Extract retry metadata injected by RetryModule
         attempt_number: int = kwargs.get("_retry_attempt", 0)
@@ -479,13 +492,16 @@ class TelemetryModule(BaseModule):
                 )
             except Exception:
                 # FR-4 / C3 — a raising call still records an operational line.
+                req_body, _ = self._raw_bodies(messages, tools, kwargs, None)
                 self._record_spool(
                     outcome="error",
                     model=None,
                     cost=None,
                     latency_ms=round((time.monotonic() - t0) * 1000, 1),
+                    request_body=req_body,
                 )
                 raise
+            req_body, resp_body = self._raw_bodies(messages, tools, kwargs, response)
             self._record_spool(
                 outcome="ok",
                 model=response.model,
@@ -493,6 +509,8 @@ class TelemetryModule(BaseModule):
                 latency_ms=total_ms,
                 prompt_tokens=response.usage.input_tokens,
                 completion_tokens=response.usage.output_tokens,
+                request_body=req_body,
+                response_body=resp_body,
             )
             return response
 
@@ -587,14 +605,25 @@ class TelemetryModule(BaseModule):
         latency_ms: float,
         prompt_tokens: int | None = None,
         completion_tokens: int | None = None,
+        request_body: dict[str, Any] | None = None,
+        response_body: dict[str, Any] | None = None,
     ) -> None:
         """Append one ``llm_call`` operational record to the arcstore spool.
 
         On by default (``arcstore_enabled``); imports only ``arcstore.spool``.
         ``record()`` is itself fail-open, so this never breaks the call.
+
+        Raw request/response bodies ride ``extra`` only when ``store_raw_bodies``
+        is enabled (they arrive non-None) — so the UI can show the actual call,
+        not just metadata. Metadata-only is the federal/CUI default.
         """
         if not self._arcstore_enabled:
             return
+        extra: dict[str, Any] = {}
+        if request_body is not None:
+            extra["request_body"] = request_body
+        if response_body is not None:
+            extra["response_body"] = response_body
         _spool_record(
             _SpoolRecord(
                 kind="llm_call",
@@ -607,5 +636,6 @@ class TelemetryModule(BaseModule):
                 cost_usd=cost,
                 latency_ms=latency_ms,
                 outcome=outcome,
+                extra=extra,
             )
         )
