@@ -82,3 +82,39 @@ async def test_disabled_records_nothing(messages: list[Message]) -> None:
     with patch.object(telemetry_mod, "_spool_record", recorded.append):
         await module.invoke(messages)
     assert recorded == []
+
+
+async def test_raw_bodies_ride_extra_when_enabled(messages: list[Message]) -> None:
+    """store_raw_bodies=True parks request/response payloads in spool extra so
+    the UI can show the actual call, not just metadata."""
+    module = TelemetryModule(_config(store_raw_bodies=True), _inner())
+    recorded: list = []
+    with patch.object(telemetry_mod, "_spool_record", recorded.append):
+        await module.invoke(messages)
+    extra = recorded[0].extra
+    assert extra["request_body"]["messages"][0]["content"] == "hi"
+    assert extra["response_body"]["content"] == "ok"
+
+
+async def test_no_raw_bodies_in_extra_by_default(messages: list[Message]) -> None:
+    """Metadata-only is the federal/CUI default — no payloads leak into extra."""
+    module = TelemetryModule(_config(), _inner())
+    recorded: list = []
+    with patch.object(telemetry_mod, "_spool_record", recorded.append):
+        await module.invoke(messages)
+    assert "request_body" not in recorded[0].extra
+    assert "response_body" not in recorded[0].extra
+
+
+async def test_error_path_carries_request_body_only(messages: list[Message]) -> None:
+    """An erroring call still records the request payload (no response exists)."""
+    inner = _inner()
+    inner.invoke = AsyncMock(side_effect=RuntimeError("boom"))
+    module = TelemetryModule(_config(store_raw_bodies=True), inner)
+    recorded: list = []
+    with patch.object(telemetry_mod, "_spool_record", recorded.append):
+        with pytest.raises(RuntimeError):
+            await module.invoke(messages)
+    extra = recorded[0].extra
+    assert extra["request_body"]["messages"][0]["content"] == "hi"
+    assert "response_body" not in extra

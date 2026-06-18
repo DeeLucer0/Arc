@@ -75,9 +75,11 @@ def _build_team(tmp_path: Path, agents: list[tuple[str, str]]) -> Path:
             f'[{{"id": "{name}-t1", "title": "{name} task", "status": "open"}}]',
             encoding="utf-8",
         )
-        skills = ws / "skills"
-        skills.mkdir()
-        (skills / f"{name}_skill.md").write_text(
+        # Loader convention: skills are SKILL.md folders under the skills/
+        # subdir of a capabilities root (workspace/capabilities/skills/<name>/).
+        skill_dir = ws / "capabilities" / "skills" / f"{name}_skill"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
             f"---\nname: {name}_skill\ndescription: skill of {name}\n---\nbody\n",
             encoding="utf-8",
         )

@@ -173,10 +173,20 @@ class PolicyEngine:
 
         response = await model.invoke([Message(role="user", content=prompt)])
         raw = response.content
+        _logger.info(
+            "policy.reflect: eval returned %d chars (session=%s)", len(raw or ""), session_id
+        )
 
         try:
             data = json.loads(extract_json(raw))
         except (json.JSONDecodeError, TypeError):
+            # The eval model didn't return parseable JSON — no bullets can be
+            # derived. Logged so this silent path is observable (was invisible).
+            _logger.warning(
+                "policy.reflect: eval output was not valid JSON; no bullets written. "
+                "First 200 chars: %r",
+                (raw or "")[:200],
+            )
             return None, current_policy
 
         additions = [
@@ -201,8 +211,22 @@ class PolicyEngine:
         ]
 
         if not additions and not updates and not rewrites:
+            # Valid JSON, but the eval found nothing noteworthy — common and
+            # expected. Logged so "no bullets" is explainable rather than silent.
+            _logger.info(
+                "policy.reflect: eval produced an empty delta "
+                "(0 additions/updates/rewrites); policy.md unchanged (session=%s)",
+                session_id,
+            )
             return None, current_policy
 
+        _logger.info(
+            "policy.reflect: delta has %d additions, %d updates, %d rewrites (session=%s)",
+            len(additions),
+            len(updates),
+            len(rewrites),
+            session_id,
+        )
         return PolicyDelta(
             additions=additions,
             updates=updates,
@@ -286,6 +310,9 @@ class PolicyEngine:
         # Atomic write
         content = self._serialize_policy(bullets)
         atomic_write_text(self._policy_path, content)
+        _logger.info(
+            "policy.curate: wrote %d bullet(s) to %s", len(bullets), self._policy_path
+        )
 
     def _parse_policy(self, content: str) -> list[PolicyBullet]:
         """Parse policy.md into structured bullets."""

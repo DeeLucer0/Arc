@@ -133,6 +133,16 @@ tier = "personal"
 [security.validators]
 auto_run_agent_code = false
 
+[capabilities]
+# Relax the AST import gate for agent-authored tools under
+# workspace/capabilities/ WITHOUT moving them out of the protected root.
+# Tier-gated: personal = all imports allowed (this block is ignored);
+# enterprise = deny by default, set allow_all_imports = true or list
+# allow_imports; federal = deny by default, ONLY allow_imports is honored
+# (allow_all_imports is ignored). eval/exec/frame-traversal stay blocked always.
+allow_all_imports = false
+allow_imports = []
+
 [modules.memory]
 enabled = true
 
@@ -313,9 +323,9 @@ def _scaffold_workspace(agent_dir: Path, name: str) -> None:
         context_path.write_text(_DEFAULT_CONTEXT)
 
     # Per-agent capabilities live at the AGENT root (trusted scan root).
-    # Agent-authored capabilities go under workspace/.capabilities (untrusted).
+    # Agent-authored capabilities go under workspace/capabilities (untrusted).
     (agent_dir / "capabilities").mkdir(exist_ok=True)
-    (workspace / ".capabilities").mkdir(exist_ok=True)
+    (workspace / "capabilities").mkdir(exist_ok=True)
 
     for subdir in [
         "notes",
@@ -342,7 +352,7 @@ def _print_scaffold_summary(display_name: str, agent_dir: Path) -> None:
     sys.stdout.write("      calculator.py\n")
     sys.stdout.write("    workspace/\n")
     sys.stdout.write("      identity.md, policy.md, context.md\n")
-    sys.stdout.write("      .capabilities/          # agent-authored (UNTRUSTED, AST-validated)\n")
+    sys.stdout.write("      capabilities/          # agent-authored (UNTRUSTED, AST-validated)\n")
     sys.stdout.write("      notes/, entities/\n")
     sys.stdout.write("      sessions/, archive/\n")
     sys.stdout.write("      library/scripts/, templates/, prompts/, data/, snippets/\n")
@@ -396,7 +406,7 @@ def _capability_scan_roots(agent_dir: Path) -> list[tuple[str, Path]]:
     return [
         ("global", _GLOBAL_CAP_DIR),
         ("agent", agent_dir / "capabilities"),
-        ("workspace", workspace / ".capabilities"),
+        ("workspace", workspace / "capabilities"),
     ]
 
 

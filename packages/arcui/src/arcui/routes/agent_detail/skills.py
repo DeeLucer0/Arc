@@ -96,16 +96,21 @@ async def get_skills(request: Request) -> JSONResponse:
 
 
 def discover_skills(agent_id: str, agent_root: Path) -> list[dict[str, Any]]:
-    """Collect an agent's skills from every standard on-disk location.
+    """Collect an agent's skills from the exact roots the loader scans.
 
-    Shared by the agent-detail Skills tab and the fleet Tools & Skills page so
-    both surface the same set:
-      - team/<agent>/workspace/skills/        (legacy runtime skills)
-      - team/<agent>/skills/                  (legacy agent-shipped skills)
-      - team/<agent>/capabilities/<name>/     (agent-shipped capabilities)
-      - team/<agent>/workspace/.capabilities/ (agent-authored capabilities)
-      - ~/.arcagent/skills/                   (user-global, if present)
-      - arcagent builtins                     (create-skill, update-tool, ...)
+    Mirrors ``CapabilityLoader``: skills are subfolders containing a
+    ``SKILL.md`` under the ``skills/`` subdir of each capabilities root.
+    ``create_skill``/``update_skill`` write to ``capabilities/skills/<name>/``,
+    and the loader registers a per-root ``skills/`` directory (see the
+    ``builtins-skills`` root in ``agent_lifecycle.setup_capabilities``). Roots,
+    in loader precedence order:
+      - arcagent builtins  → builtins/capabilities/skills/   (create-skill, ...)
+      - global             → ~/.arc/capabilities/skills/
+      - agent              → team/<agent>/capabilities/skills/
+      - workspace          → team/<agent>/workspace/capabilities/skills/
+
+    The fleet Tools & Skills page and the agent-detail Skills tab both call
+    this, so they surface the identical set the agent loads into its prompt.
     """
     skills: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -117,30 +122,23 @@ def discover_skills(agent_id: str, agent_root: Path) -> list[dict[str, Any]]:
                 seen.add(key)
                 skills.append(s)
 
+    # Each capabilities root's skills live one level down in ``skills/``.
+    # Scan that subdir directly (rel_dir="") so a skill at
+    # ``<root>/capabilities/skills/<name>/SKILL.md`` lands at depth 1, the
+    # shape _scan_skills_dir recognizes. fs_reader skips dot-children, so the
+    # scan root must be the skills/ dir itself, not its parent.
     workspace = agent_root / "workspace"
-    if workspace.is_dir():
-        _merge(_scan_skills_dir(agent_id, workspace, "skills", "workspace"))
-    if (agent_root / "skills").is_dir():
-        _merge(_scan_skills_dir(agent_id, agent_root, "skills", "agent_dir"))
-    # Agent-shipped capabilities (trusted): team/<agent>/capabilities/<name>/SKILL.md.
-    # Skills live directly under capabilities/, alongside @tool .py files (which
-    # the .md filter skips).
-    if (agent_root / "capabilities").is_dir():
-        _merge(_scan_skills_dir(agent_id, agent_root / "capabilities", "", "agent_dir"))
-    # Agent-authored capabilities (untrusted): workspace/.capabilities/<name>/SKILL.md.
-    # fs_reader skips dot-children, so the hidden dir must be the scan root itself.
-    if (workspace / ".capabilities").is_dir():
-        _merge(_scan_skills_dir(agent_id, workspace / ".capabilities", "", "workspace"))
-    # Global skills dir (set by [extensions].global_dir/.. or convention)
-    global_skills = Path.home() / ".arcagent" / "skills"
-    if global_skills.is_dir():
-        try:
-            _merge(_scan_skills_dir(agent_id, global_skills.parent, "skills", "global"))
-        except Exception:  # reason: fail-open — log + continue
-            logger.debug("global skills scan failed", exc_info=True)
+    roots: list[tuple[Path, str]] = [
+        (agent_root / "capabilities" / "skills", "agent_dir"),
+        (workspace / "capabilities" / "skills", "workspace"),
+        (Path.home() / ".arc" / "capabilities" / "skills", "global"),
+    ]
+    for skills_root, source in roots:
+        if skills_root.is_dir():
+            _merge(_scan_skills_dir(agent_id, skills_root, "", source))
+
     # System-wide built-in skills shipped with arcagent (create-skill,
-    # update-skill, create-tool, update-tool, ...). These are SKILL.md
-    # folders — _scan_skills_dir already understands that convention.
+    # update-skill, create-tool, update-tool, ...) — the builtins-skills root.
     try:
         # importlib.util.find_spec preserves the arcui→arcagent boundary
         # (SPEC-023 §2.2) — we only need arcagent's filesystem path, never
@@ -151,7 +149,7 @@ def discover_skills(agent_id: str, agent_root: Path) -> list[dict[str, Any]]:
         if spec is not None and spec.origin is not None:
             builtin_skills = Path(spec.origin).parent / "builtins" / "capabilities" / "skills"
             if builtin_skills.is_dir():
-                _merge(_scan_skills_dir(agent_id, builtin_skills.parent, "skills", "builtin"))
+                _merge(_scan_skills_dir(agent_id, builtin_skills, "", "builtin"))
     except Exception:  # reason: fail-open — log + continue
         logger.debug("builtin skills scan failed", exc_info=True)
 

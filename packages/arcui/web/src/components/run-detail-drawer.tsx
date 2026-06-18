@@ -10,9 +10,10 @@ import {
 import { JsonBlock } from '@/components/json-block'
 import { LoadingRows, EmptyState } from '@/components/states'
 import { StatusText } from '@/components/status-badge'
+import { TraceDrawer } from '@/components/trace-drawer'
 import { useRunTimeline } from '@/lib/queries'
 import { fmtLatency, fmtNumber, fmtTime, shortId } from '@/lib/format'
-import type { RunSummary, TimelineEntry } from '@/lib/types'
+import type { RunSummary, TimelineEntry, Trace } from '@/lib/types'
 
 const CODE_EXEC_TOOLS = new Set(['execute_python', 'execute'])
 
@@ -35,6 +36,7 @@ interface LlmItem {
   tokensIn: number
   tokensOut: number
   latency_ms?: number | null
+  traceId?: string | null // the llm_call record id — deep-links to its ArcLLM call
 }
 interface RunItem {
   kind: 'run'
@@ -96,6 +98,7 @@ function mergeTimeline(entries: TimelineEntry[]): Item[] {
         tokensIn: e.prompt_tokens ?? 0,
         tokensOut: e.completion_tokens ?? 0,
         latency_ms: e.latency_ms,
+        traceId: e.record_id ?? null,
       })
     } else {
       items.push({ kind: 'run', ts: e.ts, name: e.name ?? 'event' })
@@ -104,8 +107,22 @@ function mergeTimeline(entries: TimelineEntry[]): Item[] {
   return items
 }
 
+/** Render a tool payload readably: strings as text, objects as formatted JSON. */
+function PayloadView({ value }: { value: unknown }) {
+  if (value == null) return <p className="text-xs text-muted-foreground">—</p>
+  if (typeof value === 'string') {
+    return (
+      <pre className="max-h-60 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/30 p-2 font-mono text-xs text-foreground">
+        {value}
+      </pre>
+    )
+  }
+  return <JsonBlock value={value} className="max-h-60" />
+}
+
 function ToolRow({ item }: { item: ToolItem }) {
   const [open, setOpen] = useState(false)
+  const [view, setView] = useState<'structured' | 'raw'>('structured')
   const Icon = item.isCode ? Code : Wrench
   const hasBodies = item.input != null || item.output != null
   return (
@@ -128,25 +145,46 @@ function ToolRow({ item }: { item: ToolItem }) {
       </button>
       {open && hasBodies && (
         <div className="space-y-2 border-t border-border/60 px-3 py-2">
-          <div>
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Input</p>
-            {item.input != null ? <JsonBlock value={item.input} className="max-h-60" /> : <p className="text-xs text-muted-foreground">—</p>}
+          <div className="flex gap-1 text-[11px]">
+            {(['structured', 'raw'] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setView(v)}
+                className={`rounded px-2 py-0.5 capitalize ${
+                  view === v ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {v}
+              </button>
+            ))}
           </div>
-          <div>
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Output</p>
-            {item.output != null ? <JsonBlock value={item.output} className="max-h-60" /> : <p className="text-xs text-muted-foreground">—</p>}
-          </div>
+          {view === 'structured' ? (
+            <>
+              <div>
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Input (sent to tool)</p>
+                <PayloadView value={item.input} />
+              </div>
+              <div>
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Output (returned)</p>
+                <PayloadView value={item.output} />
+              </div>
+            </>
+          ) : (
+            <JsonBlock value={{ input: item.input, output: item.output }} className="max-h-72" />
+          )}
         </div>
       )}
     </div>
   )
 }
 
-function TimelineItem({ item }: { item: Item }) {
+function TimelineItem({ item, onOpenTrace }: { item: Item; onOpenTrace: (traceId: string) => void }) {
   if (item.kind === 'tool') return <ToolRow item={item} />
   if (item.kind === 'llm') {
-    return (
-      <div className="flex items-center gap-2 px-3 py-1.5 text-xs">
+    const traceId = item.traceId
+    const inner = (
+      <>
         <span className="w-12 shrink-0 tabular-nums text-muted-foreground">{fmtTime(item.ts)}</span>
         <Bot className="size-3.5 shrink-0 text-chart-2" />
         <span className="font-mono text-foreground">{item.model}</span>
@@ -158,7 +196,19 @@ function TimelineItem({ item }: { item: Item }) {
         {item.latency_ms != null && (
           <span className="tabular-nums text-muted-foreground">{fmtLatency(item.latency_ms)}</span>
         )}
-      </div>
+        {traceId && <span className="ml-auto text-[11px] text-primary">view call →</span>}
+      </>
+    )
+    return traceId ? (
+      <button
+        type="button"
+        onClick={() => onOpenTrace(traceId)}
+        className="flex w-full items-center gap-2 rounded px-3 py-1.5 text-left text-xs hover:bg-muted/40"
+      >
+        {inner}
+      </button>
+    ) : (
+      <div className="flex items-center gap-2 px-3 py-1.5 text-xs">{inner}</div>
     )
   }
   return (
@@ -182,24 +232,33 @@ export function RunDetailDrawer({
 }) {
   const { data, isLoading } = useRunTimeline(open ? run?.run_id ?? null : null)
   const items = data ? mergeTimeline(data.timeline) : []
+  // Deep-link: clicking an LLM step opens that exact ArcLLM call's drawer.
+  const [selectedTrace, setSelectedTrace] = useState<Trace | null>(null)
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
-        <SheetHeader className="border-b border-border px-5 py-4">
-          <SheetTitle className="font-mono text-sm">Run {shortId(run?.run_id ?? '', 18)}</SheetTitle>
-          <SheetDescription>
-            {run ? `${run.agent} · ${run.turns} turns · ${run.tool_calls} tools · ${run.status}` : ''}
-          </SheetDescription>
-        </SheetHeader>
-        <div className="flex-1 space-y-1.5 overflow-auto p-4">
-          {isLoading && <LoadingRows rows={6} />}
-          {!isLoading && !items.length && <EmptyState title="No steps recorded for this run" />}
-          {items.map((item, i) => (
-            <TimelineItem key={i} item={item} />
-          ))}
-        </div>
-      </SheetContent>
-    </Sheet>
+    <>
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+          <SheetHeader className="border-b border-border px-5 py-4">
+            <SheetTitle className="font-mono text-sm">Run {shortId(run?.run_id ?? '', 18)}</SheetTitle>
+            <SheetDescription>
+              {run ? `${run.agent} · ${run.turns} turns · ${run.tool_calls} tools · ${run.status}` : ''}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex-1 space-y-1.5 overflow-auto p-4">
+            {isLoading && <LoadingRows rows={6} />}
+            {!isLoading && !items.length && <EmptyState title="No steps recorded for this run" />}
+            {items.map((item, i) => (
+              <TimelineItem key={i} item={item} onOpenTrace={(id) => setSelectedTrace({ trace_id: id })} />
+            ))}
+          </div>
+        </SheetContent>
+      </Sheet>
+      <TraceDrawer
+        trace={selectedTrace}
+        open={selectedTrace !== null}
+        onOpenChange={(o) => !o && setSelectedTrace(null)}
+      />
+    </>
   )
 }

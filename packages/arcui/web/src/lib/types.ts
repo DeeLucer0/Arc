@@ -225,6 +225,7 @@ export interface TimelineEntry {
   kind: string // run_event | tool_event | llm_call
   ts?: string | null
   request_id?: string | null
+  record_id?: string | null // arcstore row id — for an llm_call this is its trace_id
   // tool_event
   tool_name?: string | null
   phase?: string | null

@@ -126,7 +126,7 @@ def _agent_skills(agent: ArcAgent) -> list[_Skill]:
 def _workspace_authored(agent: ArcAgent) -> frozenset[str]:
     """Names of capabilities (tools + skills) the agent authored at runtime.
 
-    These live under ``<workspace>/.capabilities`` (scan_root == "workspace")
+    These live under ``<workspace>/capabilities`` (scan_root == "workspace")
     and are denied in federal tier (AC-6.1). Pulled from the capability registry,
     which records each entry's scan_root.
     """
@@ -145,6 +145,7 @@ async def dispatch_stream(
     input_text: str,
     *,
     session: SessionManager,
+    tool_choice: dict[str, Any] | None = None,
 ) -> AsyncIterator[StreamEvent]:
     """The single execution path: stream one agent turn into a session.
 
@@ -153,6 +154,11 @@ async def dispatch_stream(
     commits the assistant turn and runs compaction. The recording bridge is
     handed to ``run_stream`` as ``on_event`` so SPEC-026 spool/WORM capture and
     module telemetry fire exactly as they did on the blocking path.
+
+    ``tool_choice`` is forwarded verbatim to ``arcrun_run_stream`` so callers
+    that need to force a tool call on the first turn (e.g. orchestrators
+    chaining stages through a ``signals_completion`` tool) can pin behavior
+    without reaching into arcrun.
 
     Emits ``agent:pre_respond`` (via ``build_run_context``) before the loop and
     ``agent:post_respond`` after the stream is fully consumed.
@@ -176,6 +182,7 @@ async def dispatch_stream(
                 messages=history,
                 on_event=bridge,
                 transform_context=transform,
+                tool_choice=tool_choice,
                 actor_did=agent._identity.did if agent._identity else None,
                 store_raw_bodies=agent._config.telemetry.capture_tool_io,
             )
