@@ -6,26 +6,10 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from arcllm import LLMProvider
+from arcllm import MODULE_NAMES, LLMProvider
 from arcllm import load_model as arcllm_load_model
 
 _logger = logging.getLogger("arcagent.utils")
-
-# arcllm.load_model keyword names that map to arcllm modules. Kept here so
-# ``load_eval_model`` can validate ``arcllm_modules`` keys at the agent
-# boundary and fail loudly on typos instead of silently dropping them.
-_ARCLLM_MODULE_KWARGS: frozenset[str] = frozenset({
-    "routing",
-    "retry",
-    "fallback",
-    "rate_limit",
-    "circuit_breaker",
-    "telemetry",
-    "queue",
-    "audit",
-    "security",
-    "otel",
-})
 
 
 def load_eval_model(
@@ -66,11 +50,11 @@ def load_eval_model(
 
     module_overrides: dict[str, Any] = {}
     if arcllm_modules:
-        unknown = set(arcllm_modules) - _ARCLLM_MODULE_KWARGS
+        unknown = set(arcllm_modules) - MODULE_NAMES
         if unknown:
             raise ValueError(
                 f"Unknown arcllm module key(s): {sorted(unknown)}. "
-                f"Valid keys: {sorted(_ARCLLM_MODULE_KWARGS)}.",
+                f"Valid keys: {sorted(MODULE_NAMES)}.",
             )
         module_overrides.update(arcllm_modules)
 

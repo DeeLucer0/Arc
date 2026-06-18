@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 
 class TestLoadEvalModel:
     def test_parses_provider_model(self) -> None:
@@ -78,17 +80,11 @@ class TestLoadEvalModel:
         """An arcllm_modules key that isn't a known arcllm module fails loudly."""
         from arcagent.utils import load_eval_model
 
-        with patch("arcagent.utils.arcllm_load_model") as mock_load:
-            mock_load.return_value = MagicMock()
-            try:
-                load_eval_model(
-                    "anthropic/claude-haiku",
-                    arcllm_modules={"bogus_module": {"foo": 1}},
-                )
-            except ValueError as exc:
-                assert "bogus_module" in str(exc)
-            else:
-                raise AssertionError("expected ValueError for unknown module key")
+        with pytest.raises(ValueError, match="bogus_module"):
+            load_eval_model(
+                "anthropic/claude-haiku",
+                arcllm_modules={"bogus_module": {"foo": 1}},
+            )
 
 
 class TestFormatMessages:
