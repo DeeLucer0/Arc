@@ -192,6 +192,98 @@ async def test_run_collected_returns_result_for_callbacks(
 
 @pytest.mark.asyncio
 @patch("arcagent.core.model_manager.load_eval_model")
+async def test_run_forwards_tool_choice_to_arcrun(
+    mock_load_model: MagicMock,
+    agent_config: ArcAgentConfig,
+) -> None:
+    """tool_choice passes through agent.run -> dispatch_stream -> arcrun_run_stream.
+
+    Pipeline callers (e.g. multi-stage orchestrators) need to force a
+    completion tool call on the first turn. Without this, models that
+    reason silently (qwen3's <think> mode) can end a turn with no
+    visible content and no tool call.
+    """
+    mock_load_model.return_value = MagicMock(close=AsyncMock())
+    agent = ArcAgent(config=agent_config)
+
+    captured: dict[str, Any] = {}
+
+    async def _factory(*args: Any, **kwargs: Any) -> AsyncIterator[StreamEvent]:
+        captured.update(kwargs)
+        return _fake_stream("ok")
+
+    with patch("arcagent.core.agent_dispatch.arcrun_run_stream", side_effect=_factory):
+        await agent.startup()
+        try:
+            session = await agent.session("unit:tc")
+            async for _ in agent.run(
+                "hi", session=session, tool_choice={"type": "required"},
+            ):
+                pass
+        finally:
+            await agent.shutdown()
+
+    assert captured.get("tool_choice") == {"type": "required"}
+
+
+@pytest.mark.asyncio
+@patch("arcagent.core.model_manager.load_eval_model")
+async def test_run_collected_forwards_tool_choice(
+    mock_load_model: MagicMock,
+    agent_config: ArcAgentConfig,
+) -> None:
+    """run_collected forwards tool_choice via run -> dispatch_stream."""
+    mock_load_model.return_value = MagicMock(close=AsyncMock())
+    agent = ArcAgent(config=agent_config)
+
+    captured: dict[str, Any] = {}
+
+    async def _factory(*args: Any, **kwargs: Any) -> AsyncIterator[StreamEvent]:
+        captured.update(kwargs)
+        return _fake_stream("done")
+
+    with patch("arcagent.core.agent_dispatch.arcrun_run_stream", side_effect=_factory):
+        await agent.startup()
+        try:
+            await agent.run_collected(
+                "go", session_key="cb:1", tool_choice={"type": "required"},
+            )
+        finally:
+            await agent.shutdown()
+
+    assert captured.get("tool_choice") == {"type": "required"}
+
+
+@pytest.mark.asyncio
+@patch("arcagent.core.model_manager.load_eval_model")
+async def test_run_omits_tool_choice_by_default(
+    mock_load_model: MagicMock,
+    agent_config: ArcAgentConfig,
+) -> None:
+    """Default run() leaves tool_choice unset (None) — the model picks."""
+    mock_load_model.return_value = MagicMock(close=AsyncMock())
+    agent = ArcAgent(config=agent_config)
+
+    captured: dict[str, Any] = {}
+
+    async def _factory(*args: Any, **kwargs: Any) -> AsyncIterator[StreamEvent]:
+        captured.update(kwargs)
+        return _fake_stream("ok")
+
+    with patch("arcagent.core.agent_dispatch.arcrun_run_stream", side_effect=_factory):
+        await agent.startup()
+        try:
+            session = await agent.session("unit:tc-default")
+            async for _ in agent.run("hi", session=session):
+                pass
+        finally:
+            await agent.shutdown()
+
+    assert captured.get("tool_choice") is None
+
+
+@pytest.mark.asyncio
+@patch("arcagent.core.model_manager.load_eval_model")
 async def test_old_entry_methods_are_gone(
     mock_load_model: MagicMock,
     agent_config: ArcAgentConfig,
