@@ -1,0 +1,242 @@
+{
+  "CVE-2026-22815": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-25645": {
+    "cvss": 4.4,
+    "band": "MEDIUM"
+  },
+  "CVE-2026-28684": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-3219": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-34513": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-34514": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-34515": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-34516": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-34517": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-34518": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-34519": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-34520": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-34525": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-34993": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-40347": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-42561": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-44727": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-4539": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-47265": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-48817": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-48818": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-49853": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-49854": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-49855": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-50269": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-53538": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-53539": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-53540": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-54273": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-54274": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-54275": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-54276": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-54277": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-54278": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-54279": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-54280": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-54282": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-54283": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "CVE-2026-6357": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "GHSA-4xgf-cpjx-pc3j": {
+    "cvss": 5.3,
+    "band": "MEDIUM"
+  },
+  "GHSA-537c-gmf6-5ccf": {
+    "cvss": 7.5,
+    "band": "HIGH"
+  },
+  "GHSA-6v7p-g79w-8964": {
+    "cvss": 7.5,
+    "band": "HIGH"
+  },
+  "GHSA-8rfp-98v4-mmr6": {
+    "cvss": 0.0,
+    "band": "NONE"
+  },
+  "GHSA-g75f-g53v-794x": {
+    "cvss": 4.3,
+    "band": "MEDIUM"
+  },
+  "GHSA-gj48-438w-jh9v": {
+    "cvss": 6.1,
+    "band": "MEDIUM"
+  },
+  "GHSA-pw6j-qg29-8w7f": {
+    "cvss": 5.9,
+    "band": "MEDIUM"
+  },
+  "GHSA-vmhf-c436-hxj4": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "PYSEC-2026-120": {
+    "cvss": 7.5,
+    "band": "HIGH"
+  },
+  "PYSEC-2026-141": {
+    "cvss": 5.3,
+    "band": "MEDIUM"
+  },
+  "PYSEC-2026-142": {
+    "cvss": 7.5,
+    "band": "HIGH"
+  },
+  "PYSEC-2026-161": {
+    "cvss": null,
+    "band": "UNSCORED"
+  },
+  "PYSEC-2026-175": {
+    "cvss": 4.2,
+    "band": "MEDIUM"
+  },
+  "PYSEC-2026-176": {
+    "cvss": 5.4,
+    "band": "MEDIUM"
+  },
+  "PYSEC-2026-177": {
+    "cvss": 3.7,
+    "band": "LOW"
+  },
+  "PYSEC-2026-178": {
+    "cvss": 5.3,
+    "band": "MEDIUM"
+  },
+  "PYSEC-2026-179": {
+    "cvss": 7.4,
+    "band": "HIGH"
+  },
+  "PYSEC-2026-196": {
+    "cvss": 5.5,
+    "band": "MEDIUM"
+  },
+  "PYSEC-2026-215": {
+    "cvss": 5.3,
+    "band": "MEDIUM"
+  },
+  "PYSEC-2026-35": {
+    "cvss": 5.3,
+    "band": "MEDIUM"
+  },
+  "PYSEC-2026-36": {
+    "cvss": 9.8,
+    "band": "CRITICAL"
+  }
+}
